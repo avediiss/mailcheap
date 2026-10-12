@@ -1,4 +1,5 @@
 import { getArchiveUrls } from "@/lib/archive-hosts";
+import { getAppUrl } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import Campaign from "@/models/Campaign";
 import Newsletter from "@/models/Newsletter";
@@ -16,5 +17,6 @@ export async function GET(request, { params }) {
 		campaign && (await Newsletter.findOne({ _id: campaign.newsletterId, archiveEnabled: true }).select("slug").lean());
 	if (!newsletter) return new Response("Not found", { status: 404 });
 
-	return Response.redirect(new URL(getArchiveUrls(newsletter).post(slug), request.url), 307);
+	// APP_URL, not request.url: behind a reverse proxy the request URL is the server's internal address.
+	return Response.redirect(new URL(getArchiveUrls(newsletter).post(slug), getAppUrl()), 307);
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAppUrl } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { getClientIp, isRateLimited } from "@/lib/rate-limit";
 import { verifyUnsubscribeToken } from "@/lib/unsubscribe";
@@ -49,8 +50,10 @@ async function unsubscribe({ contactId, newsletterId }) {
 	);
 }
 
+// Built from APP_URL, not request.url: behind a reverse proxy (Hostinger) the request URL is the
+// server's internal address (https://0.0.0.0:3000), and the browser can't follow a redirect to it.
 function redirectToPage(request, params) {
-	const url = new URL("/unsubscribe", request.url);
+	const url = new URL("/unsubscribe", getAppUrl());
 	for (const [key, value] of Object.entries(params)) {
 		if (value) url.searchParams.set(key, value);
 	}
