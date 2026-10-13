@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { Suspense } from "react";
 import Link from "next/link";
-import { Types, isValidObjectId } from "mongoose";
-import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Users } from "lucide-react";
 import AvatarContact from "@/components/AvatarContact";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import BadgeStatus from "@/components/BadgeStatus";
@@ -23,6 +22,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { buildContactFilters, readContactFilters } from "@/lib/contact-filter";
 import { connectDb } from "@/lib/db";
 import { formatDate, formatNumber } from "@/lib/format";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
@@ -36,9 +36,7 @@ const PAGE_SIZE = 50;
 
 export default async function ContactsPage({ searchParams }) {
 	const params = await searchParams;
-	const newsletterId = isValidObjectId(params.newsletter) ? params.newsletter : null;
-	const status = CONTACT_STATUSES.includes(params.status) ? params.status : null;
-	const query = typeof params.q === "string" ? params.q.trim().toLowerCase().slice(0, 254) : "";
+	const { newsletterId, status, query } = readContactFilters(params);
 	const page = Math.max(1, Number.parseInt(params.page, 10) || 1);
 
 	await connectDb();
@@ -46,11 +44,11 @@ export default async function ContactsPage({ searchParams }) {
 	const newsletterOptions = toNewsletterOptions(newsletters);
 	const newsletterMap = toNewsletterMap(newsletters);
 
-	const baseFilter = {
-		...(newsletterId && { newsletterId: new Types.ObjectId(newsletterId) }),
-		...(query && { email: { $regex: `^${escapeRegex(query)}` } }),
-	};
-	const filter = { ...baseFilter, ...(status && { status }) };
+	const { baseFilter, filter } = buildContactFilters({ newsletterId, status, query });
+	// The export downloads what the page shows: same newsletter, status and search.
+	const exportQuery = new URLSearchParams(
+		Object.entries({ newsletter: newsletterId, status, q: query }).filter(([, value]) => value)
+	);
 
 	// One count per status reads only the status indexes; grouping the contacts would read every one.
 	const [statusCounts, contacts] = await Promise.all([
@@ -81,6 +79,12 @@ export default async function ContactsPage({ searchParams }) {
 	return (
 		<>
 			<HeaderPage title="Contacts">
+				<Button asChild variant="outline">
+					<a href={`/api/contacts-export${exportQuery.size ? `?${exportQuery}` : ""}`} download>
+						<Download data-icon="inline-start" />
+						Export
+					</a>
+				</Button>
 				<DialogAddContact newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
 					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
 			</HeaderPage>
@@ -145,6 +149,21 @@ export default async function ContactsPage({ searchParams }) {
 													size={26}
 												/>
 												<span className="truncate">{contact.email}</span>
+												{contact.firstName && (
+													<span className="hidden shrink-0 text-muted-foreground sm:inline">{contact.firstName}</span>
+												)}
+												{contact.tags?.length > 0 && (
+													<span className="hidden shrink-0 gap-1 md:flex">
+														{contact.tags.slice(0, 3).map((tag) => (
+															<span
+																key={tag}
+																className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground"
+															>
+																{tag}
+															</span>
+														))}
+													</span>
+												)}
 											</span>
 										</TableCell>
 										<TableCell>
@@ -168,7 +187,13 @@ export default async function ContactsPage({ searchParams }) {
 											{formatDate(contact.subscribedAt) ?? <TextEmpty />}
 										</TableCell>
 										<TableCell className="pr-2 text-right">
-											<MenuContact id={contact._id.toString()} status={contact.status} />
+											<MenuContact
+												id={contact._id.toString()}
+												email={contact.email}
+												status={contact.status}
+												firstName={contact.firstName}
+												tags={contact.tags ?? []}
+											/>
 										</TableCell>
 									</TableRow>
 								))}
@@ -217,10 +242,6 @@ function PageLink({ href, isDisabled, label, children }) {
 
 function gravatarHash(email) {
 	return crypto.createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
-}
-
-function escapeRegex(value) {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function engagement(contact, statKey, importedKey) {

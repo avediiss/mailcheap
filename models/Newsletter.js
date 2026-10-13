@@ -19,6 +19,8 @@ const newsletterSchema = new mongoose.Schema(
 		},
 		// New signups get an email with a link and only join once they click it (confirmed opt-in).
 		requireConfirmation: { type: Boolean, default: false },
+		// Email ADMIN_EMAIL when someone subscribes (lib/signup-notice.js). Needs ALERT_FROM.
+		notifyOnSignup: { type: Boolean, default: false },
 		// Checked when an issue is sent (lib/cleanup.js). Empty numbers use the newsletter's defaults.
 		cleanup: {
 			enabled: { type: Boolean, default: false },

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight, Newspaper, Settings2, TriangleAlert } from "lucide-react";
 import BadgeStatus from "@/components/BadgeStatus";
 import ButtonNewCampaign from "@/components/ButtonNewCampaign";
+import CardStat from "@/components/CardStat";
 import ChartSends from "@/components/ChartSends";
 import ChartSubscribers from "@/components/ChartSubscribers";
 import CookieTimezone from "@/components/CookieTimezone";
@@ -29,10 +30,12 @@ import { formatCompact, formatNumber, formatSigned } from "@/lib/format";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
 import { getEmailStats, getHourlySends, getSubscriberHistory } from "@/lib/overview-data";
 import { PERIOD_DAYS } from "@/lib/overview-series";
+import { estimateCost, formatCost, getPricePer1000, startOfMonth } from "@/lib/send-cost";
 import { getSesAccount, listSesDomains } from "@/lib/ses";
 import { TIME_ZONE_COOKIE, resolveTimeZone, timeZoneLabel } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import Campaign from "@/models/Campaign";
+import Message from "@/models/Message";
 
 // Everything above Domains is about one newsletter, the largest unless ?newsletter= picks one. The page
 // waits for one query (the tabs); every section then loads on its own behind a skeleton of its size.
@@ -91,6 +94,12 @@ export default async function OverviewPage({ searchParams }) {
 						<Section title="Today" stagger={2}>
 							<Suspense key={`sends-${selectedId}`} fallback={<SkeletonSends />}>
 								<CardSends newsletterId={selected._id} timeZone={timeZone} />
+							</Suspense>
+						</Section>
+
+						<Section title="This month" stagger={3}>
+							<Suspense key="send-cost" fallback={null}>
+								<CardSendCost newsletters={newsletters} />
 							</Suspense>
 						</Section>
 
@@ -188,6 +197,29 @@ async function CardSends({ newsletterId, timeZone }) {
 				/>
 			</div>
 			<ChartSends hours={hours} />
+		</div>
+	);
+}
+
+// Amazon bills by the email, for the whole account, so this adds up every newsletter. It's an estimate:
+// SES's own bill also has small items, and the price is SES_PRICE_PER_1000 (default $0.10).
+async function CardSendCost({ newsletters }) {
+	const since = startOfMonth();
+	const counts = await Promise.all(
+		newsletters.map(({ _id }) =>
+			Message.countDocuments({ newsletterId: _id, sentAt: { $gte: since }, kind: { $ne: "test" } })
+		)
+	);
+	const emails = counts.reduce((sum, count) => sum + count, 0);
+	const price = getPricePer1000();
+
+	return (
+		<div className="animate-fade-in">
+			<CardStat
+				label="Emails sent this month"
+				value={formatNumber(emails)}
+				detail={`About ${formatCost(estimateCost(emails, price))} on Amazon SES, at $${price.toFixed(2)} per 1,000`}
+			/>
 		</div>
 	);
 }

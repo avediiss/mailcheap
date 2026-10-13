@@ -3,10 +3,13 @@ import { sendAlert } from "@/lib/alerts";
 import { authenticateRequest } from "@/lib/api-keys";
 import { isSendingEnabled } from "@/lib/config";
 import { upsertContact } from "@/lib/contacts";
+import { normalizeTags } from "@/lib/csv-import";
 import { connectDb } from "@/lib/db";
 import { getInbox } from "@/lib/inbox-links";
+import { toFirstName } from "@/lib/merge-tags";
 import { isRateLimited } from "@/lib/rate-limit";
 import { queueConfirmationEmail, queueWelcomeEmail } from "@/lib/sending";
+import { notifyNewSubscriber } from "@/lib/signup-notice";
 import { isPlainObject, normalizeEmail } from "@/lib/validation";
 import Newsletter from "@/models/Newsletter";
 
@@ -23,7 +26,7 @@ function fail(status, error) {
 
 function readInput(body) {
 	if (!isPlainObject(body)) return { error: "Send a JSON object" };
-	const { newsletter, email, source, resubscribe, ip } = body;
+	const { newsletter, email, source, resubscribe, ip, firstName, tags } = body;
 	if (typeof newsletter !== "string" || !newsletter.trim()) return { error: "newsletter is required" };
 
 	const normalizedEmail = normalizeEmail(email);
@@ -34,12 +37,19 @@ function readInput(body) {
 	if (resubscribe !== undefined && typeof resubscribe !== "boolean") {
 		return { error: "resubscribe must be a boolean" };
 	}
+	if (firstName !== undefined && typeof firstName !== "string") return { error: "firstName must be a string" };
+	if (tags !== undefined && (!Array.isArray(tags) || tags.some((tag) => typeof tag !== "string"))) {
+		return { error: "tags must be an array of strings" };
+	}
 	return {
 		slug: newsletter.trim().toLowerCase(),
 		email: normalizedEmail,
 		source: source?.trim() || "api",
 		resubscribe: resubscribe === true,
 		ip: typeof ip === "string" && IP_PATTERN.test(ip) ? ip : null,
+		// A full name is fine: only the first word is kept, for {{first_name}}.
+		firstName: toFirstName(firstName) || undefined,
+		tags: normalizeTags(tags),
 	};
 }
 
@@ -73,7 +83,10 @@ export async function POST(request) {
 		email: input.email,
 		source: input.source,
 		resubscribe: input.resubscribe,
+		firstName: input.firstName,
+		tags: input.tags,
 	});
+	if (created) after(() => notifyNewSubscriber({ newsletter, contact }));
 	// A pending contact who signs up again gets the confirmation again (throttled per address).
 	const isPending = contact.status === "pending";
 	if (isSendingEnabled() && (isPending || (created && contact.status === "active"))) {

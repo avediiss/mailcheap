@@ -31,18 +31,26 @@ export default function DialogAddContact({ newsletters, defaultNewsletterId }) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [newsletterId, setNewsletterId] = useState(defaultNewsletterId || newsletters[0]?.id || "");
 	const [email, setEmail] = useState("");
+	const [firstName, setFirstName] = useState("");
+	const [tags, setTags] = useState("");
 	const [isAdding, startAdding] = useTransition();
+
+	function reset() {
+		setEmail("");
+		setFirstName("");
+		setTags("");
+	}
 
 	function onSubmit(event) {
 		event.preventDefault();
 		startAdding(async () => {
-			const result = await addContact({ newsletterId, email });
+			const result = await addContact({ newsletterId, email, firstName, tags });
 			if (result?.error) return toast.error(result.error);
 
 			const { type, message } = describeAddResult(result);
 			toast[type](message);
 			if (type !== "success") return;
-			setEmail("");
+			reset();
 			setIsOpen(false);
 			router.refresh();
 		});
@@ -54,7 +62,7 @@ export default function DialogAddContact({ newsletters, defaultNewsletterId }) {
 			onOpenChange={(open) => {
 				if (isAdding) return;
 				setIsOpen(open);
-				if (!open) setEmail("");
+				if (!open) reset();
 			}}
 		>
 			<DialogTrigger asChild>
@@ -97,6 +105,23 @@ export default function DialogAddContact({ newsletters, defaultNewsletterId }) {
 							autoComplete="off"
 							autoFocus
 							required
+							disabled={isAdding}
+						/>
+						<Input
+							value={firstName}
+							onChange={(event) => setFirstName(event.target.value)}
+							placeholder="First name (optional)"
+							aria-label="First name"
+							maxLength={60}
+							autoComplete="off"
+							disabled={isAdding}
+						/>
+						<Input
+							value={tags}
+							onChange={(event) => setTags(event.target.value)}
+							placeholder="Tags, separated by commas (optional)"
+							aria-label="Tags"
+							autoComplete="off"
 							disabled={isAdding}
 						/>
 					</div>

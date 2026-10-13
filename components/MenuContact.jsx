@@ -1,20 +1,25 @@
 "use client";
 
-import { useTransition } from "react";
-import { MoreHorizontal, UserCheck, UserX } from "lucide-react";
+import { useState, useTransition } from "react";
+import { MoreHorizontal, Pencil, Trash2, UserCheck, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { setContactStatus } from "@/app/(app)/contacts/actions";
+import DialogDeleteContact from "@/components/DialogDeleteContact";
+import DialogEditContact from "@/components/DialogEditContact";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export default function MenuContact({ id, status }) {
+export default function MenuContact({ id, email, status, firstName, tags }) {
 	const [isPending, startTransition] = useTransition();
-	if (!["active", "dormant"].includes(status)) return null;
+	const [isEditOpen, setIsEditOpen] = useState(false);
+	const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+	const canChangeStatus = ["active", "dormant"].includes(status);
 
 	function update(nextStatus) {
 		startTransition(async () => {
@@ -24,24 +29,50 @@ export default function MenuContact({ id, status }) {
 	}
 
 	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="icon-sm" aria-label="Actions" disabled={isPending}>
-					<MoreHorizontal />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end">
-				{status === "dormant" && (
-					<DropdownMenuItem onSelect={() => update("active")}>
-						<UserCheck />
-						Reactivate
+		<>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${email}`} disabled={isPending}>
+						<MoreHorizontal />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					<DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
+						<Pencil />
+						Edit
 					</DropdownMenuItem>
-				)}
-				<DropdownMenuItem variant="destructive" onSelect={() => update("unsubscribed")}>
-					<UserX />
-					Unsubscribe
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
+					{status === "dormant" && (
+						<DropdownMenuItem onSelect={() => update("active")}>
+							<UserCheck />
+							Reactivate
+						</DropdownMenuItem>
+					)}
+					{canChangeStatus && (
+						<DropdownMenuItem variant="destructive" onSelect={() => update("unsubscribed")}>
+							<UserX />
+							Unsubscribe
+						</DropdownMenuItem>
+					)}
+					<DropdownMenuSeparator />
+					<DropdownMenuItem variant="destructive" onSelect={() => setIsDeleteOpen(true)}>
+						<Trash2 />
+						Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+			{isEditOpen && (
+				<DialogEditContact
+					id={id}
+					email={email}
+					firstName={firstName}
+					tags={tags}
+					isOpen
+					onOpenChange={setIsEditOpen}
+				/>
+			)}
+			{isDeleteOpen && (
+				<DialogDeleteContact id={id} email={email} status={status} isOpen onOpenChange={setIsDeleteOpen} />
+			)}
+		</>
 	);
 }

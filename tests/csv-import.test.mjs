@@ -17,6 +17,8 @@ test("maps common export headers", () => {
 		emailsReceived: null,
 		openRate: "Open Rate",
 		clickRate: "Click Through Rate",
+		firstName: null,
+		tags: null,
 	});
 });
 

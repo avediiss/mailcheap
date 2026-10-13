@@ -9,6 +9,10 @@ const contactSchema = new mongoose.Schema(
 		email: { type: String, required: true, lowercase: true, trim: true },
 		status: { type: String, enum: CONTACT_STATUSES, default: "active" },
 		source: { type: String, trim: true },
+		// For {{first_name}} in emails (lib/merge-tags.js). Optional: signups, imports and the Add dialog can set it.
+		firstName: { type: String, trim: true, maxlength: 60 },
+		// Labels to send to a part of the list (the campaign's "To" menu). Lowercase, at most 10 per contact.
+		tags: [{ type: String, trim: true, lowercase: true, maxlength: 40 }],
 		subscribedAt: { type: Date, default: Date.now },
 		confirmedAt: { type: Date },
 		unsubscribedAt: { type: Date },
@@ -38,6 +42,8 @@ const contactSchema = new mongoose.Schema(
 contactSchema.index({ newsletterId: 1, email: 1 }, { unique: true });
 contactSchema.index({ newsletterId: 1, status: 1, createdAt: -1 });
 contactSchema.index({ email: 1 });
+// Sending to a tag: the audience query filters a newsletter's active contacts by label.
+contactSchema.index({ newsletterId: 1, status: 1, tags: 1 });
 // The contacts list shows the newest subscribers first, with or without newsletter and status filters.
 // It breaks ties by _id, which the index needs too: without it MongoDB sorts the whole list on every page.
 contactSchema.index({ subscribedAt: -1, _id: -1 });

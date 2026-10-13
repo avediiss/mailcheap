@@ -31,6 +31,7 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 	const [fromEmail, setFromEmail] = useState(newsletter?.fromEmail ?? "");
 	const [imageUrl, setImageUrl] = useState(newsletter?.imageUrl ?? "");
 	const [isConfirmationRequired, setIsConfirmationRequired] = useState(Boolean(newsletter?.requireConfirmation));
+	const [isSignupNoticeOn, setIsSignupNoticeOn] = useState(Boolean(newsletter?.notifyOnSignup));
 	const [confirmationEdits, setConfirmationEdits] = useState(null);
 	const [isWelcomeEnabled, setIsWelcomeEnabled] = useState(Boolean(newsletter?.welcome?.enabled));
 	const [welcome, setWelcome] = useState({
@@ -194,6 +195,25 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 						placeholder="Company name, street, city, country"
 					/>
 				</Field>
+			</Section>
+
+			<Section
+				title="New subscriber emails"
+				stagger={2}
+				action={
+					<Switch
+						name="notifyOnSignup"
+						checked={isSignupNoticeOn}
+						onCheckedChange={setIsSignupNoticeOn}
+						aria-label="Email me when someone subscribes"
+					/>
+				}
+			>
+				<p className="px-4 py-3 text-sm text-pretty text-muted-foreground">
+					Get an email when someone subscribes through your website or the API. If a flood of signups arrives,
+					you get a single &quot;many signups&quot; email instead. It needs the ALERT_FROM setting, a sender
+					address on a verified domain.
+				</p>
 			</Section>
 
 			<Section

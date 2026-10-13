@@ -233,7 +233,8 @@ export default function FormCampaign({
 						<input
 							value={values.subject}
 							onChange={update("subject")}
-							placeholder="Subject"
+							placeholder="Subject (tip: {{first_name|friend}} personalizes it)"
+							title="Write {{first_name}} or {{first_name|friend}} in the subject or the email. Each reader gets their own first name, or the word after the bar when you don't have one."
 							maxLength={200}
 							className="h-11 w-full min-w-0 bg-transparent text-sm font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground"
 						/>

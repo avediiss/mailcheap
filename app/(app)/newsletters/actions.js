@@ -46,6 +46,7 @@ function readNewsletter(formData) {
 		author: { bio: readText(formData, "authorBio"), imageUrl: readText(formData, "authorImageUrl") },
 		socialLinks: parseSocialLinks(formData.get("socialLinks")),
 		requireConfirmation: formData.get("requireConfirmation") === "on",
+		notifyOnSignup: formData.get("notifyOnSignup") === "on",
 		cleanup: {
 			enabled: formData.get("cleanupEnabled") === "on",
 			issues: readNumber(formData, "cleanupIssues"),
