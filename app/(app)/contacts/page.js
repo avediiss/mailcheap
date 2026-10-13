@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import AvatarContact from "@/components/AvatarContact";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import BadgeStatus from "@/components/BadgeStatus";
+import DialogAddContact from "@/components/DialogAddContact";
 import DialogImportContacts from "@/components/DialogImportContacts";
 import FilterContacts from "@/components/FilterContacts";
 import HeaderPage from "@/components/HeaderPage";
@@ -80,7 +81,8 @@ export default async function ContactsPage({ searchParams }) {
 	return (
 		<>
 			<HeaderPage title="Contacts">
-				<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
+				<DialogAddContact newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
+					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
 			</HeaderPage>
 
 			<div className="flex flex-col gap-4">
