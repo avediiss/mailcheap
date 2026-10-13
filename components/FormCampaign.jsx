@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/lib/format";
 import { markdownToHtml } from "@/lib/markdown";
+import { applyMergeTags } from "@/lib/merge-tags";
 import { getPresendChecks } from "@/lib/presend-checks";
 import { UNSUBSCRIBE_PLACEHOLDER, renderEmail, withResponsiveImages } from "@/lib/render-email";
 import { slugify } from "@/lib/slug";
@@ -78,7 +79,8 @@ export default function FormCampaign({
 		[format, deferredValues, newsletter]
 	);
 	const previewHtml = useMemo(
-		() => withResponsiveImages(rendered.html.replaceAll(UNSUBSCRIBE_PLACEHOLDER, "#")),
+		// The preview shows what a reader with no first name gets: {{first_name|friend}} reads "friend".
+		() => withResponsiveImages(applyMergeTags(rendered.html.replaceAll(UNSUBSCRIBE_PLACEHOLDER, "#"), {}, { html: true })),
 		[rendered.html]
 	);
 	const { checks, blocking } = getPresendChecks({
@@ -332,7 +334,7 @@ export default function FormCampaign({
 					<ListChecks checks={checks} />
 					<PreviewEmail
 						sender={newsletter}
-						subject={deferredValues.subject}
+						subject={applyMergeTags(deferredValues.subject, {})}
 						previewText={deferredValues.previewText}
 						html={previewHtml}
 						className="lg:min-h-0 lg:flex-1"
