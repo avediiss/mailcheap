@@ -11,6 +11,7 @@ import { getConfirmationProblem } from "@/lib/confirmation-content";
 import { connectDb } from "@/lib/db";
 import { MAX_AUTHOR_BIO_LENGTH, MAX_DESCRIPTION_LENGTH } from "@/lib/newsletters";
 import { sendWelcomeTestEmail } from "@/lib/sending";
+import { getSequenceProblem, normalizeSteps } from "@/lib/sequence";
 import { parseSocialLinks } from "@/lib/social";
 import Newsletter from "@/models/Newsletter";
 
@@ -30,6 +31,19 @@ function readNumber(formData, key) {
 
 function isWithin(value, min, max) {
 	return value === undefined || (Number.isInteger(value) && value >= min && value <= max);
+}
+
+// The series form repeats its fields once per email: row n is the n-th value of each.
+function readSequenceRows(formData) {
+	const [delays, subjects, previews, markdowns] = ["Delay", "Subject", "Preview", "Markdown"].map((field) =>
+		formData.getAll(`sequence${field}`).map(String)
+	);
+	return subjects.map((subject, index) => ({
+		delayDays: delays[index],
+		subject,
+		previewText: previews[index],
+		markdown: markdowns[index],
+	}));
 }
 
 function readNewsletter(formData) {
@@ -58,6 +72,7 @@ function readNewsletter(formData) {
 			previewText: readText(formData, "welcomePreviewText"),
 			markdown: String(formData.get("welcomeMarkdown") ?? ""),
 		},
+		sequence: { enabled: formData.get("sequenceEnabled") === "on", rows: readSequenceRows(formData) },
 		confirmation: {
 			subject: readText(formData, "confirmationSubject"),
 			previewText: readText(formData, "confirmationPreviewText"),
@@ -94,6 +109,8 @@ function validateNewsletter(values) {
 	if (values.welcome.enabled && (!values.welcome.subject || !values.welcome.markdown.trim())) {
 		return "Welcome email needs a subject and content";
 	}
+	const sequenceProblem = getSequenceProblem(values.sequence.rows);
+	if (sequenceProblem) return sequenceProblem;
 	return values.requireConfirmation ? getConfirmationProblem(values.confirmation) : null;
 }
 
@@ -119,12 +136,13 @@ export async function saveNewsletter(_state, formData) {
 	const error = validateNewsletter(values);
 	if (error) return { error };
 	// A collapsed email section sends no fields, and what it had saved stays as it is.
-	const { welcome, confirmation, ...rest } = values;
+	const { welcome, confirmation, sequence, ...rest } = values;
 	const document = {
 		...rest,
 		socialLinks: values.socialLinks.links,
 		...(formData.has("welcomeSubject") && { welcome }),
 		...(formData.has("confirmationSubject") && { confirmation }),
+		...(formData.has("sequenceShown") && { sequence: { enabled: sequence.enabled, steps: normalizeSteps(sequence.rows) } }),
 	};
 
 	await connectDb();

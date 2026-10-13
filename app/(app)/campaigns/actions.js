@@ -3,8 +3,10 @@
 import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { VARIANTS, isAbTest } from "@/lib/ab-test";
 import { notifyActivity } from "@/lib/alerts";
 import { PUBLISHED_STATUSES, revalidateArchive } from "@/lib/archive-data";
+import { normalizeSegment } from "@/lib/audience";
 import { requireSession } from "@/lib/auth";
 import { getAppUrl, isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
@@ -69,17 +71,24 @@ export async function saveCampaign(id, values) {
 	// The editor opens Markdown drafts as rich text, so their first save moves them to it.
 	const format = campaign.format === "markdown" ? "rich" : campaign.format;
 	const thumbnailUrl = firstImageUrl({ format, html: body });
+	const subjectB = String(values?.subjectB ?? "").trim().slice(0, MAX_SUBJECT_LENGTH);
+	// Without a second subject there is no A/B test, and no winner of one.
+	const unset = {
+		...(!thumbnailUrl && { thumbnailUrl: 1 }),
+		...(!subjectB && { subjectB: 1, abWinner: 1, abWinnerAt: 1 }),
+	};
 	const { matchedCount } = await Campaign.updateOne(
 		{ _id: campaign._id, status: { $in: EDITABLE_STATUSES } },
 		{
 			$set: {
 				subject: String(values?.subject ?? "").slice(0, MAX_SUBJECT_LENGTH),
+				...(subjectB && { subjectB }),
 				previewText: String(values?.previewText ?? "").slice(0, 300),
 				format,
 				html: body,
 				...(thumbnailUrl && { thumbnailUrl }),
 			},
-			...(!thumbnailUrl && { $unset: { thumbnailUrl: 1 } }),
+			...(unset && { $unset: unset }),
 		}
 	);
 	if (!matchedCount) return { error: "This campaign is already sending" };
@@ -263,9 +272,69 @@ export async function duplicateCampaign(id) {
 		thumbnailUrl: campaign.thumbnailUrl,
 		// A copy of an API draft is still content from the API key's holder, not from the dashboard.
 		...(campaign.source === "api" && { source: "api" }),
+		// The copy goes to the same part of the list and tests the same subjects, but starts the test over.
+		...(campaign.audience?.tag || campaign.audience?.source
+			? { audience: normalizeSegment(campaign.audience) }
+			: {}),
+		...(campaign.subjectB && { subjectB: campaign.subjectB }),
 	});
 	revalidatePath("/campaigns");
 	redirect(`/campaigns/${copy._id}`);
+}
+
+// Choose who a draft goes to: a tag and/or a signup source. Both empty means everyone.
+export async function setCampaignAudience(id, { tag, source } = {}) {
+	const campaign = await findCampaign(id);
+	if (!campaign) return { error: "Campaign not found" };
+	if (campaign.audience?.nonOpenersOf) return { error: "A resend to non-openers has its own audience" };
+
+	const segment = normalizeSegment({ tag, source });
+	const { matchedCount } = await Campaign.updateOne(
+		{ _id: campaign._id, status: { $in: EDITABLE_STATUSES } },
+		Object.keys(segment).length > 0 ? { $set: { audience: segment } } : { $unset: { audience: 1 } }
+	);
+	if (!matchedCount) return { error: "This campaign is already sending" };
+	revalidatePath(`/campaigns/${id}`);
+	return { ok: true };
+}
+
+// A new draft with the same email, addressed to the people who didn't open or click this one.
+export async function resendToNonOpeners(id) {
+	const campaign = await findCampaign(id);
+	if (!campaign) return { error: "Campaign not found" };
+	if (campaign.status !== "sent") return { error: "Wait until the campaign has finished sending" };
+	if (campaign.audience?.nonOpenersOf) {
+		return { error: "This is already a resend. Resend the original issue instead." };
+	}
+
+	const copy = await Campaign.create({
+		newsletterId: campaign.newsletterId,
+		subject: campaign.subject,
+		previewText: campaign.previewText,
+		format: campaign.format,
+		markdown: campaign.markdown,
+		html: campaign.html,
+		thumbnailUrl: campaign.thumbnailUrl,
+		audience: { nonOpenersOf: campaign._id },
+		// A nudge for a few readers doesn't belong on the public archive next to the real issue.
+		archiveListed: false,
+		...(campaign.source === "api" && { source: "api" }),
+	});
+	revalidatePath("/campaigns");
+	redirect(`/campaigns/${copy._id}`);
+}
+
+// After an A/B test sent to a few contacts: the rest of the list gets the winning subject.
+export async function setAbWinner(id, variant) {
+	const campaign = await findCampaign(id);
+	if (!campaign) return { error: "Campaign not found" };
+	if (!VARIANTS.includes(variant)) return { error: "Pick A or B" };
+	if (!isAbTest(campaign)) return { error: "This campaign has no A/B test" };
+	if (campaign.status !== "sent") return { error: "Wait until the campaign has finished sending" };
+
+	await Campaign.updateOne({ _id: campaign._id, status: "sent" }, { $set: { abWinner: variant, abWinnerAt: new Date() } });
+	revalidatePath(`/campaigns/${id}`);
+	return { ok: true };
 }
 
 // Discarded campaigns keep everything: canceled hides them from the lists and stops a scheduled send.

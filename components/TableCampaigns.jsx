@@ -95,6 +95,7 @@ export default function TableCampaigns({ campaigns, newsletters, hasActions = fa
 											subject={campaign.subject}
 											scheduledAt={campaign.scheduledAt?.toISOString() ?? null}
 											pageUrl={pageUrls[id] ?? null}
+											isResend={Boolean(campaign.audience?.nonOpenersOf)}
 										/>
 									</TableCell>
 								)}

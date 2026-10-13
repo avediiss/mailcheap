@@ -17,6 +17,17 @@ const campaignSchema = new mongoose.Schema(
 		status: { type: String, enum: CAMPAIGN_STATUSES, default: "draft" },
 		// Warm-up: send to the most engaged contacts first, capped at audienceLimit.
 		audienceLimit: { type: Number, min: 1 },
+		// Who it goes to: all active contacts, or only a tag and/or signup source, or only the people who
+		// didn't open an earlier campaign (lib/audience.js, lib/non-openers.js).
+		audience: {
+			tag: { type: String, trim: true, lowercase: true, maxlength: 40 },
+			source: { type: String, trim: true, maxlength: 60 },
+			nonOpenersOf: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign" },
+		},
+		// Subject-line A/B test (lib/ab-test.js): half get subject, half get subjectB, until a winner is picked.
+		subjectB: { type: String, trim: true, maxlength: 200 },
+		abWinner: { type: String, enum: ["A", "B"] },
+		abWinnerAt: { type: Date },
 		source: { type: String, default: "dashboard" },
 		scheduledAt: { type: Date },
 		startedAt: { type: Date },

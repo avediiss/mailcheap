@@ -1,13 +1,16 @@
-import { Copy, ExternalLink, Globe, Pause, Pin, PinOff, Play } from "lucide-react";
+import Link from "next/link";
+import { Copy, ExternalLink, Globe, Pause, Pin, PinOff, Play, Repeat } from "lucide-react";
 import {
 	duplicateCampaign,
 	pauseCampaign,
+	resendToNonOpeners,
 	resumeCampaign,
 	toggleArchivePin,
 } from "@/app/(app)/campaigns/actions";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import BadgeStatus from "@/components/BadgeStatus";
 import ButtonCampaignAction from "@/components/ButtonCampaignAction";
+import CardAbTest from "@/components/CardAbTest";
 import ButtonCopy from "@/components/ButtonCopy";
 import CardStat from "@/components/CardStat";
 import DialogSendMore from "@/components/DialogSendMore";
@@ -32,7 +35,15 @@ import { rateTone } from "@/lib/health";
 import { PROVIDER_DOMAINS, PROVIDER_LABELS } from "@/lib/providers";
 import { UNSUBSCRIBE_PLACEHOLDER, renderEmail, withResponsiveImages } from "@/lib/render-email";
 
-export default function CampaignReport({ campaign, newsletter, providers, remainingCount = 0 }) {
+export default function CampaignReport({
+	campaign,
+	newsletter,
+	providers,
+	remainingCount = 0,
+	resendOrigin = null,
+	variants = null,
+	verdict = null,
+}) {
 	const { stats } = campaign;
 	const id = campaign._id.toString();
 	const isOnArchive = newsletter.archiveEnabled && Boolean(campaign.archiveSlug) && campaign.archiveListed !== false;
@@ -62,6 +73,16 @@ export default function CampaignReport({ campaign, newsletter, providers, remain
 						remainingCount={remainingCount}
 						isCleanupEnabled={Boolean(newsletter.cleanup?.enabled)}
 					/>
+				)}
+				{campaign.status === "sent" && !campaign.audience?.nonOpenersOf && (
+					<ButtonCampaignAction
+						action={resendToNonOpeners}
+						id={id}
+						disabledReason={isSendingEnabled() ? null : "Sending is off"}
+					>
+						<Repeat data-icon="inline-start" />
+						Resend to non-openers
+					</ButtonCampaignAction>
 				)}
 				{campaign.status === "sending" && (
 					<ButtonCampaignAction action={pauseCampaign} id={id}>
@@ -117,6 +138,16 @@ export default function CampaignReport({ campaign, newsletter, providers, remain
 					</div>
 				)}
 
+				{resendOrigin && (
+					<p className="text-sm text-muted-foreground animate-enter">
+						Sent to the people who didn’t open{" "}
+						<Link href={`/campaigns/${resendOrigin.id}`} className="underline underline-offset-2">
+							{resendOrigin.subject || "Untitled"}
+						</Link>
+						.
+					</p>
+				)}
+
 				<div
 					style={{ "--stagger": 1 }}
 					className="grid grid-cols-2 gap-3 animate-enter sm:grid-cols-3 lg:grid-cols-6"
@@ -154,6 +185,10 @@ export default function CampaignReport({ campaign, newsletter, providers, remain
 						detail={formatNumber(stats.unsubscribed)}
 					/>
 				</div>
+
+				{variants && (
+					<CardAbTest campaign={campaign} variants={variants} verdict={verdict} canPick={campaign.status === "sent"} />
+				)}
 
 				{providers.length > 0 && (
 					<div

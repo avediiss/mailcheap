@@ -12,10 +12,14 @@ export const MESSAGE_STATUSES = [
 
 const messageSchema = new mongoose.Schema(
 	{
-		kind: { type: String, enum: ["campaign", "last-chance", "welcome", "confirmation", "test"], required: true },
+		kind: { type: String, enum: ["campaign", "last-chance", "welcome", "confirmation", "test", "sequence"], required: true },
 		campaignId: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign" },
 		newsletterId: { type: mongoose.Schema.Types.ObjectId, ref: "Newsletter", required: true },
 		contactId: { type: mongoose.Schema.Types.ObjectId, ref: "Contact" },
+		// Which subject an A/B test campaign sent this contact (lib/ab-test.js).
+		variant: { type: String, enum: ["A", "B"] },
+		// Welcome series: the step (0, 1, ...) of the newsletter's sequence this email is.
+		step: { type: Number, min: 0 },
 		email: { type: String, required: true, lowercase: true, trim: true },
 		provider: { type: String },
 		status: { type: String, enum: MESSAGE_STATUSES, default: "queued" },
@@ -41,6 +45,13 @@ messageSchema.index(
 	{ campaignId: 1, contactId: 1, kind: 1 },
 	{ unique: true, partialFilterExpression: { kind: "last-chance" } }
 );
+// And one email per contact per welcome-series step.
+messageSchema.index(
+	{ contactId: 1, step: 1 },
+	{ unique: true, partialFilterExpression: { kind: "sequence" } }
+);
+// The A/B test results.
+messageSchema.index({ campaignId: 1, variant: 1 }, { sparse: true });
 messageSchema.index({ sesMessageId: 1 }, { sparse: true });
 messageSchema.index({ kind: 1, createdAt: -1 });
 // The overview's emails sent per hour.

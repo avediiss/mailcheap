@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
-import { ExternalLink, FlaskConical, Loader2 } from "lucide-react";
+import { ExternalLink, FlaskConical, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { saveNewsletter, sendWelcomeTest } from "@/app/(app)/newsletters/actions";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
@@ -15,6 +15,7 @@ import { CONFIRM_URL_PLACEHOLDER, getConfirmationContent } from "@/lib/confirmat
 import { formatNumber } from "@/lib/format";
 import { KEEP_URL_PLACEHOLDER, getLastChanceContent } from "@/lib/last-chance-content";
 import { MAX_AUTHOR_BIO_LENGTH, MAX_DESCRIPTION_LENGTH } from "@/lib/newsletters";
+import { MAX_DELAY_DAYS, MAX_STEPS, MIN_DELAY_DAYS } from "@/lib/sequence";
 import { UNSUBSCRIBE_PLACEHOLDER, renderEmail } from "@/lib/render-email";
 import { slugify } from "@/lib/slug";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,15 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 		previewText: newsletter?.welcome?.previewText ?? "",
 		markdown: newsletter?.welcome?.markdown ?? "",
 	});
+	const [isSequenceEnabled, setIsSequenceEnabled] = useState(Boolean(newsletter?.sequence?.enabled));
+	const [sequence, setSequence] = useState(() =>
+		(newsletter?.sequence?.steps ?? []).map((step) => ({
+			delayDays: String(step.delayDays ?? ""),
+			subject: step.subject ?? "",
+			previewText: step.previewText ?? "",
+			markdown: step.markdown ?? "",
+		}))
+	);
 	const [isArchiveEnabled, setIsArchiveEnabled] = useState(Boolean(newsletter?.archiveEnabled));
 	const savedCleanup = getCleanupSettings(newsletter);
 	const [isCleanupEnabled, setIsCleanupEnabled] = useState(savedCleanup.enabled);
@@ -101,6 +111,25 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 			const { value } = event.target;
 			setWelcome((current) => ({ ...current, [key]: value }));
 		};
+	}
+
+	function updateSequence(index, key) {
+		return (event) => {
+			const { value } = event.target;
+			setSequence((current) => current.map((row, position) => (position === index ? { ...row, [key]: value } : row)));
+		};
+	}
+
+	function addSequenceStep() {
+		setSequence((current) => {
+			const lastDelay = Number(current.at(-1)?.delayDays) || 0;
+			const delayDays = String(Math.min(MAX_DELAY_DAYS, lastDelay ? lastDelay + 3 : 2));
+			return [...current, { delayDays, subject: "", previewText: "", markdown: "" }];
+		});
+	}
+
+	function removeSequenceStep(index) {
+		setSequence((current) => current.filter((_, position) => position !== index));
 	}
 
 	function updateCleanup(key) {
@@ -328,6 +357,74 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 						<Button type="button" variant="outline" size="sm" onClick={sendTest} disabled={!isSendingEnabled || isTesting}>
 							{isTesting ? <Loader2 className="animate-spin" /> : <FlaskConical />}
 							Send test
+						</Button>
+					</div>
+				)}
+			</Section>
+
+			<Section
+				title="Welcome series"
+				stagger={3}
+				action={
+					<Switch
+						name="sequenceEnabled"
+						checked={isSequenceEnabled}
+						onCheckedChange={setIsSequenceEnabled}
+						aria-label="Welcome series"
+					/>
+				}
+			>
+				<input type="hidden" name="sequenceShown" value="1" />
+				<p className="px-4 py-3 text-xs text-pretty text-muted-foreground">
+					Emails that go out by themselves after someone joins, each a number of days after they signed up
+					(or confirmed). The welcome email above is sent right away; these follow it. Use{" "}
+					<code className="rounded bg-muted px-1">{"{{first_name|friend}}"}</code> to greet each reader by
+					name. Only people who join after you switch it on get the series.
+				</p>
+				{sequence.map((row, index) => (
+					<div key={index} className="divide-y divide-border/60">
+						<Field label={`Email ${index + 1}`} hint="Days after signup">
+							<Input
+								name="sequenceDelay"
+								type="number"
+								min={MIN_DELAY_DAYS}
+								max={MAX_DELAY_DAYS}
+								value={row.delayDays}
+								onChange={updateSequence(index, "delayDays")}
+								className="w-28"
+							/>
+						</Field>
+						<Field label="Subject">
+							<Input name="sequenceSubject" value={row.subject} onChange={updateSequence(index, "subject")} />
+						</Field>
+						<Field label="Preview text">
+							<Input
+								name="sequencePreview"
+								value={row.previewText}
+								placeholder="Optional"
+								onChange={updateSequence(index, "previewText")}
+							/>
+						</Field>
+						<Field label="Content" hint="Markdown">
+							<Textarea
+								name="sequenceMarkdown"
+								value={row.markdown}
+								onChange={updateSequence(index, "markdown")}
+								className="min-h-40 font-mono text-[13px] leading-6"
+							/>
+						</Field>
+						<div className="flex justify-end px-4 py-2">
+							<Button type="button" variant="ghost" size="sm" onClick={() => removeSequenceStep(index)}>
+								Remove email {index + 1}
+							</Button>
+						</div>
+					</div>
+				))}
+				{sequence.length < MAX_STEPS && (
+					<div className="px-4 py-3">
+						<Button type="button" variant="outline" size="sm" onClick={addSequenceStep}>
+							<Plus />
+							Add an email
 						</Button>
 					</div>
 				)}

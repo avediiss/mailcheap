@@ -33,6 +33,19 @@ const newsletterSchema = new mongoose.Schema(
 			previewText: { type: String, trim: true },
 			markdown: { type: String },
 		},
+		// Welcome series (lib/sequence.js): up to 5 more emails, each a number of days after the person joined.
+		sequence: {
+			enabled: { type: Boolean, default: false },
+			steps: [
+				{
+					_id: false,
+					delayDays: { type: Number, min: 1, max: 90 },
+					subject: { type: String, trim: true, maxlength: 200 },
+					previewText: { type: String, trim: true, maxlength: 300 },
+					markdown: { type: String, maxlength: 20000 },
+				},
+			],
+		},
 		// The newsletter's own confirmation email; the built-in one goes out until it has one.
 		confirmation: {
 			subject: { type: String, trim: true },

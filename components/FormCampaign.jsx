@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useEffectEvent, useMemo, useState, useTransition } from "react";
-import { Check, CircleAlert, Copy, FlaskConical, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
+import { Check, CircleAlert, Copy, FlaskConical, Loader2, MoreHorizontal, Split, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { duplicateCampaign, saveCampaign, sendTestCampaign } from "@/app/(app)/campaigns/actions";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
@@ -14,6 +15,7 @@ import HeaderPage from "@/components/HeaderPage";
 import InputCampaignSlug from "@/components/InputCampaignSlug";
 import ListChecks from "@/components/ListChecks";
 import PreviewEmail from "@/components/PreviewEmail";
+import SelectCampaignAudience from "@/components/SelectCampaignAudience";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -35,6 +37,8 @@ export default function FormCampaign({
 	campaign,
 	newsletter,
 	audienceCount,
+	segmentOptions,
+	resendOrigin,
 	isDomainVerified,
 	isSendingEnabled,
 	testEmail,
@@ -49,9 +53,12 @@ export default function FormCampaign({
 	);
 	const [values, setValues] = useState({
 		subject: campaign.subject,
+		subjectB: campaign.subjectB ?? "",
 		previewText: campaign.previewText,
 		body: initialBody,
 	});
+	// The second subject's row opens from the menu and stays open while it has text.
+	const [isTestOpen, setIsTestOpen] = useState(Boolean(campaign.subjectB));
 	const save = useCallback((snapshot) => saveCampaign(campaign._id, snapshot), [campaign._id]);
 	const { isDirty, isSaving, error, flush } = useAutosave(values, save);
 	const [isTesting, startTesting] = useTransition();
@@ -196,6 +203,12 @@ export default function FormCampaign({
 							<Copy />
 							Duplicate
 						</DropdownMenuItem>
+						{!isTestOpen && (
+							<DropdownMenuItem onSelect={() => setIsTestOpen(true)}>
+								<Split />
+								A/B test the subject
+							</DropdownMenuItem>
+						)}
 						<DropdownMenuItem variant="destructive" onSelect={() => setIsDiscardOpen(true)}>
 							<Trash2 />
 							Discard
@@ -227,6 +240,18 @@ export default function FormCampaign({
 									· {formatNumber(audienceCount)}
 								</span>
 							</span>
+							{resendOrigin ? (
+								<Link
+									href={`/campaigns/${resendOrigin.id}`}
+									className="ml-auto truncate text-xs text-muted-foreground hover:underline"
+								>
+									Non-openers of “{resendOrigin.subject || "Untitled"}”
+								</Link>
+							) : (
+								<span className="ml-auto">
+									<SelectCampaignAudience campaignId={campaign._id} audience={campaign.audience} options={segmentOptions} />
+								</span>
+							)}
 						</span>
 					</Row>
 					<Row label="Subject">
@@ -239,6 +264,31 @@ export default function FormCampaign({
 							className="h-11 w-full min-w-0 bg-transparent text-sm font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground"
 						/>
 					</Row>
+					{isTestOpen && (
+						<Row label="Subject B">
+							<span className="flex min-w-0 items-center gap-2">
+								<input
+									value={values.subjectB}
+									onChange={update("subjectB")}
+									placeholder="Second subject: half your readers get this one"
+									title="A/B test: half of the recipients get this subject and half the one above. Send to a few readers first (Send, then limit the number), compare the opens on the report, then send the winner to the rest."
+									maxLength={200}
+									className="h-11 w-full min-w-0 bg-transparent text-sm font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground"
+								/>
+								<button
+									type="button"
+									aria-label="Remove the A/B test"
+									onClick={() => {
+										setValues((current) => ({ ...current, subjectB: "" }));
+										setIsTestOpen(false);
+									}}
+									className="text-muted-foreground hover:text-foreground"
+								>
+									<X className="size-4" />
+								</button>
+							</span>
+						</Row>
+					)}
 					<Row label="Preview">
 						<input
 							value={values.previewText}

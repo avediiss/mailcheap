@@ -9,7 +9,8 @@ import { connectDb } from "@/lib/db";
 import { getInbox } from "@/lib/inbox-links";
 import { toFirstName } from "@/lib/merge-tags";
 import { getClientIp, isRateLimited } from "@/lib/rate-limit";
-import { queueConfirmationEmail, queueWelcomeEmail } from "@/lib/sending";
+import { queueConfirmationEmail } from "@/lib/sending";
+import { queueWelcomeAndSeries } from "@/lib/sequence-jobs";
 import { notifyNewSubscriber } from "@/lib/signup-notice";
 import { normalizeEmail } from "@/lib/validation";
 import Newsletter from "@/models/Newsletter";
@@ -59,7 +60,7 @@ export async function subscribe(_state, formData) {
 	if (created) after(() => notifyNewSubscriber({ newsletter, contact }));
 	const isPending = contact.status === "pending";
 	if (isSendingEnabled() && (isPending || (created && contact.status === "active"))) {
-		const queue = isPending ? queueConfirmationEmail : queueWelcomeEmail;
+		const queue = isPending ? queueConfirmationEmail : queueWelcomeAndSeries;
 		after(() =>
 			queue({ newsletter, contact }).catch((error) =>
 				console.error(`[subscribe] Signup email for ${contact._id} failed:`, error.message)

@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChartColumn, Copy, ExternalLink, Link2, Loader2, MoreHorizontal, PenLine, Trash2 } from "lucide-react";
+import { ChartColumn, Copy, ExternalLink, Link2, Loader2, MoreHorizontal, PenLine, Repeat, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { duplicateCampaign } from "@/app/(app)/campaigns/actions";
+import { duplicateCampaign, resendToNonOpeners } from "@/app/(app)/campaigns/actions";
 import DialogDiscardCampaign from "@/components/DialogDiscardCampaign";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import {
 
 const EDITABLE_STATUSES = ["draft", "scheduled"];
 
-export default function MenuCampaign({ id, status, subject, scheduledAt, pageUrl }) {
+export default function MenuCampaign({ id, status, subject, scheduledAt, pageUrl, isResend = false }) {
 	const [isDiscardOpen, setIsDiscardOpen] = useState(false);
 	const [isDuplicating, startDuplicating] = useTransition();
 	const isEditable = EDITABLE_STATUSES.includes(status);
@@ -25,6 +25,13 @@ export default function MenuCampaign({ id, status, subject, scheduledAt, pageUrl
 	function duplicate() {
 		startDuplicating(async () => {
 			const result = await duplicateCampaign(id);
+			if (result?.error) toast.error(result.error);
+		});
+	}
+
+	function resend() {
+		startDuplicating(async () => {
+			const result = await resendToNonOpeners(id);
 			if (result?.error) toast.error(result.error);
 		});
 	}
@@ -63,6 +70,12 @@ export default function MenuCampaign({ id, status, subject, scheduledAt, pageUrl
 						<Copy />
 						Duplicate
 					</DropdownMenuItem>
+					{status === "sent" && !isResend && (
+						<DropdownMenuItem onSelect={resend}>
+							<Repeat />
+							Resend to non-openers
+						</DropdownMenuItem>
+					)}
 					{pageUrl && (
 						<>
 							<DropdownMenuSeparator />

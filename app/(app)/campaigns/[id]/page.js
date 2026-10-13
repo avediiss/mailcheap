@@ -2,7 +2,9 @@ import { isValidObjectId } from "mongoose";
 import { notFound } from "next/navigation";
 import CampaignReport from "@/components/CampaignReport";
 import FormCampaign from "@/components/FormCampaign";
+import { getAbVerdict, isAbTest, summarizeVariants } from "@/lib/ab-test";
 import { getArchiveUrls } from "@/lib/archive-hosts";
+import { countAudience, getResendOrigin, getSegmentOptions, getVariantRows } from "@/lib/campaign-audience";
 import { sendTimesPipeline } from "@/lib/campaign-queries";
 import { isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
@@ -10,7 +12,6 @@ import { MESSAGE_STATS_GROUP } from "@/lib/message-stats";
 import { serialize } from "@/lib/serialize";
 import { listSesDomains } from "@/lib/ses";
 import Campaign from "@/models/Campaign";
-import Contact from "@/models/Contact";
 import Message from "@/models/Message";
 import Newsletter from "@/models/Newsletter";
 
@@ -27,24 +28,32 @@ export default async function CampaignPage({ params }) {
 	if (!newsletter) notFound();
 
 	if (!["draft", "scheduled"].includes(campaign.status)) {
-		const [providers, remainingCount] = await Promise.all([
+		const [providers, remainingCount, resendOrigin, variantRows] = await Promise.all([
 			getProviderBreakdown(campaign._id),
 			countRemaining(campaign),
+			getResendOrigin(campaign),
+			isAbTest(campaign) ? getVariantRows(campaign) : [],
 		]);
+		const variants = isAbTest(campaign) ? summarizeVariants(variantRows) : null;
 		return (
 			<CampaignReport
 				campaign={serialize(campaign)}
 				newsletter={serialize(newsletter)}
 				providers={providers}
 				remainingCount={remainingCount}
+				resendOrigin={resendOrigin}
+				variants={variants}
+				verdict={variants ? getAbVerdict(variants) : null}
 			/>
 		);
 	}
 
-	const [audienceCount, domains, sendTimes] = await Promise.all([
-		Contact.countDocuments({ newsletterId: newsletter._id, status: "active" }),
+	const [audienceCount, domains, sendTimes, segmentOptions, resendOrigin] = await Promise.all([
+		countAudience(campaign),
 		listSesDomains(),
 		getSendTimes(campaign),
+		getSegmentOptions(newsletter._id),
+		getResendOrigin(campaign),
 	]);
 	const fromDomain = newsletter.fromEmail.split("@")[1];
 	const isDomainVerified =
@@ -55,6 +64,8 @@ export default async function CampaignPage({ params }) {
 			campaign={serialize(campaign)}
 			newsletter={serialize(newsletter)}
 			audienceCount={audienceCount}
+			segmentOptions={segmentOptions}
+			resendOrigin={resendOrigin}
 			isDomainVerified={isDomainVerified}
 			isSendingEnabled={isSendingEnabled()}
 			testEmail={process.env.ADMIN_EMAIL}
@@ -80,7 +91,7 @@ async function getSendTimes(campaign) {
 // left after receiving it make this a little low, and the send itself skips everyone who has it.
 async function countRemaining(campaign) {
 	if (campaign.status !== "sent" || !campaign.audienceLimit) return 0;
-	const active = await Contact.countDocuments({ newsletterId: campaign.newsletterId, status: "active" });
+	const active = await countAudience(campaign);
 	const reached = (campaign.stats?.recipients ?? 0) + (campaign.lastChance?.recipients ?? 0);
 	return Math.max(0, active - reached);
 }

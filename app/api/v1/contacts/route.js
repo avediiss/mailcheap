@@ -8,7 +8,8 @@ import { connectDb } from "@/lib/db";
 import { getInbox } from "@/lib/inbox-links";
 import { toFirstName } from "@/lib/merge-tags";
 import { isRateLimited } from "@/lib/rate-limit";
-import { queueConfirmationEmail, queueWelcomeEmail } from "@/lib/sending";
+import { queueConfirmationEmail } from "@/lib/sending";
+import { queueWelcomeAndSeries } from "@/lib/sequence-jobs";
 import { notifyNewSubscriber } from "@/lib/signup-notice";
 import { isPlainObject, normalizeEmail } from "@/lib/validation";
 import Newsletter from "@/models/Newsletter";
@@ -90,7 +91,7 @@ export async function POST(request) {
 	// A pending contact who signs up again gets the confirmation again (throttled per address).
 	const isPending = contact.status === "pending";
 	if (isSendingEnabled() && (isPending || (created && contact.status === "active"))) {
-		const queue = isPending ? queueConfirmationEmail : queueWelcomeEmail;
+		const queue = isPending ? queueConfirmationEmail : queueWelcomeAndSeries;
 		after(() =>
 			queue({ newsletter, contact }).catch((error) =>
 				console.error(`[api/contacts] Signup email for ${contact._id} failed:`, error.message)

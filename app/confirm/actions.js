@@ -5,7 +5,7 @@ import { isSendingEnabled } from "@/lib/config";
 import { verifyConfirmToken } from "@/lib/confirmation";
 import { confirmContact } from "@/lib/contacts";
 import { connectDb } from "@/lib/db";
-import { queueWelcomeEmail } from "@/lib/sending";
+import { queueWelcomeAndSeries } from "@/lib/sequence-jobs";
 import Newsletter from "@/models/Newsletter";
 
 export async function confirmSubscription(token) {
@@ -20,7 +20,7 @@ export async function confirmSubscription(token) {
 		const newsletter = await Newsletter.findById(reference.newsletterId).lean();
 		// Skipped while the newsletter confirms signups: the confirmation was their one email.
 		after(() =>
-			queueWelcomeEmail({ newsletter, contact }).catch((error) =>
+			queueWelcomeAndSeries({ newsletter, contact }).catch((error) =>
 				console.error(`[confirm] Welcome email for ${contact._id} failed:`, error.message)
 			)
 		);
