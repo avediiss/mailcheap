@@ -37,6 +37,9 @@ try {
 		console.log("\nStill without a workspace (should all be 0):", JSON.stringify(summary.remaining));
 	}
 	console.log(dryRun ? "\nDry run finished. Run again with --yes to apply." : "\nDone.");
+} catch (error) {
+	console.error(`\nStopped: ${error.message}`);
+	process.exitCode = 1;
 } finally {
 	await mongoose.disconnect();
 }
