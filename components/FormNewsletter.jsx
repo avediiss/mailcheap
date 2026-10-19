@@ -8,6 +8,7 @@ import AvatarNewsletter from "@/components/AvatarNewsletter";
 import PreviewEmail from "@/components/PreviewEmail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ButtonCopy from "@/components/ButtonCopy";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { CLEANUP_LIMITS, LAST_CHANCE_DAYS, getCleanupSettings } from "@/lib/cleanup";
@@ -22,7 +23,7 @@ import { cn } from "@/lib/utils";
 
 const IMAGE_PREVIEW_PATTERN = /^(https:\/\/\S+\.\S{2,}\/\S+|\/\S+\.\w{3,4})$/;
 
-export default function FormNewsletter({ newsletter, verifiedDomains, isSendingEnabled, testEmail, cleanupTotals }) {
+export default function FormNewsletter({ newsletter, verifiedDomains, isSendingEnabled, testEmail, cleanupTotals, appHost }) {
 	const [state, action, isPending] = useActionState(saveNewsletter, null);
 	const [isTesting, startTesting] = useTransition();
 	const [name, setName] = useState(newsletter?.name ?? "");
@@ -50,6 +51,7 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 		}))
 	);
 	const [isArchiveEnabled, setIsArchiveEnabled] = useState(Boolean(newsletter?.archiveEnabled));
+	const [archiveHost, setArchiveHost] = useState(newsletter?.archiveHost ?? "");
 	const savedCleanup = getCleanupSettings(newsletter);
 	const [isCleanupEnabled, setIsCleanupEnabled] = useState(savedCleanup.enabled);
 	const [cleanup, setCleanup] = useState({ issues: String(savedCleanup.issues), days: String(savedCleanup.days) });
@@ -496,7 +498,7 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 					<div className="flex items-center gap-3">
 						{newsletter?.archiveEnabled && (
 							<a
-								href={`/archive/${newsletter.slug}`}
+								href={newsletter.archiveHost ? `https://${newsletter.archiveHost}` : `/archive/${newsletter.slug}`}
 								target="_blank"
 								rel="noreferrer"
 								className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground"
@@ -515,9 +517,21 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 				}
 			>
 				<p className="px-4 py-3 text-sm text-pretty text-muted-foreground">
-					Sent issues get a page at /archive/{slug || "slug"}, with a signup form. To serve it on its own domain, add
-					the domain to ARCHIVE_HOSTS.
+					Sent issues get a public page with a signup form, at /archive/{slug || "slug"} or on your own domain.
 				</p>
+				<Field label="Your own domain" hint="Optional. Like news.example.com. Leave empty to use the address above.">
+					<Input
+						name="archiveHost"
+						value={archiveHost}
+						onChange={(event) => setArchiveHost(event.target.value)}
+						placeholder="news.example.com"
+						autoComplete="off"
+						autoCapitalize="none"
+						spellCheck={false}
+						className="font-mono"
+					/>
+				</Field>
+				{archiveHost.trim() && appHost && <ArchiveDomainSteps host={archiveHost} appHost={appHost} />}
 				<Field label="Description" hint="One sentence under the name and in the subscribe popup">
 					<Textarea
 						name="description"
@@ -618,5 +632,33 @@ function Field({ label, hint, isWarning, children }) {
 				)}
 			</span>
 		</label>
+	);
+}
+
+// What to do at the domain provider so the domain reaches this app. Pointing it, and attaching it on the
+// hosting side, is a step for whoever runs the platform: they're told when it's saved.
+function ArchiveDomainSteps({ host, appHost }) {
+	const name = host.trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/\/.*$/, "");
+	return (
+		<div className="flex flex-col gap-3 px-4 py-3">
+			<p className="text-sm font-medium">To use {name}</p>
+			<ol className="flex list-decimal flex-col gap-2 pl-5 text-sm text-pretty text-muted-foreground">
+				<li>
+					At your domain provider, add this DNS record:
+					<span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-muted px-3 py-2 font-mono text-xs text-foreground">
+						<span>CNAME</span>
+						<span className="flex items-center gap-1">
+							{name}
+							<ButtonCopy value={name} label="Copy name" />
+						</span>
+						<span className="flex items-center gap-1">
+							→ {appHost}
+							<ButtonCopy value={appHost} label="Copy value" />
+						</span>
+					</span>
+				</li>
+				<li>Save this page. The platform owner is told to switch the domain on, which usually takes a few minutes.</li>
+			</ol>
+		</div>
 	);
 }

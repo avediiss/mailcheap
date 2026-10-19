@@ -4,7 +4,7 @@ import AvatarNewsletter from "@/components/AvatarNewsletter";
 import FormNewsletter from "@/components/FormNewsletter";
 import HeaderPage from "@/components/HeaderPage";
 import { cleanupTotalsPipeline } from "@/lib/cleanup";
-import { isSendingEnabled } from "@/lib/config";
+import { getAppUrl, isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { listWorkspaceDomains, requireWorkspace } from "@/lib/workspace";
 import { filterDomainsForWorkspace } from "@/lib/workspace-rules";
@@ -50,6 +50,7 @@ export default async function NewsletterPage({ params }) {
 				isSendingEnabled={isSendingEnabled()}
 				testEmail={session.email}
 				cleanupTotals={cleanupTotals}
+				appHost={new URL(getAppUrl()).hostname}
 			/>
 		</>
 	);
