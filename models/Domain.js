@@ -6,6 +6,10 @@ const domainSchema = new mongoose.Schema(
 	{
 		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true },
 		domain: { type: String, required: true, unique: true, lowercase: true, trim: true },
+		// Created through the dashboard, so removing it also removes the SES identity. A domain the platform owner
+		// set up in SES by hand is never deleted from SES by a workspace removing it.
+		createdInSes: { type: Boolean, default: false },
+		addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 	},
 	{ timestamps: true }
 );

@@ -76,7 +76,7 @@ export async function GET(request) {
 	if (!slug) return fail(400, "newsletter is required");
 
 	await connectDb();
-	const newsletter = await Newsletter.findOne({ slug, workspaceId: apiKey.workspaceId }).select({ _id: 1, slug: 1, archiveEnabled: 1 }).lean();
+	const newsletter = await Newsletter.findOne({ slug, workspaceId: apiKey.workspaceId }).select({ _id: 1, slug: 1, archiveEnabled: 1, archiveHost: 1 }).lean();
 	if (!newsletter) return fail(404, "Newsletter not found");
 
 	const issues = await listPublishedIssues(newsletter._id);

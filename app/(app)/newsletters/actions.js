@@ -12,6 +12,11 @@ import { MAX_AUTHOR_BIO_LENGTH, MAX_DESCRIPTION_LENGTH } from "@/lib/newsletters
 import { sendWelcomeTestEmail } from "@/lib/sending";
 import { getSequenceProblem, normalizeSteps } from "@/lib/sequence";
 import { parseSocialLinks } from "@/lib/social";
+import { clearArchiveHostCache } from "@/lib/archive-host-lookup";
+import { getArchiveHostProblem, parseArchiveHosts } from "@/lib/archive-hosts";
+import { sendAlert } from "@/lib/alerts";
+import { getAppUrl } from "@/lib/config";
+import { normalizeDomain } from "@/lib/domain-rules";
 import { listWorkspaceDomains, requireWorkspace } from "@/lib/workspace";
 import { getLimitProblem, isSenderAllowed } from "@/lib/workspace-rules";
 import Newsletter from "@/models/Newsletter";
@@ -58,6 +63,7 @@ function readNewsletter(formData) {
 		replyTo: readText(formData, "replyTo").toLowerCase(),
 		postalAddress: readText(formData, "postalAddress"),
 		archiveEnabled: formData.get("archiveEnabled") === "on",
+		archiveHost: normalizeDomain(readText(formData, "archiveHost")) ?? "",
 		description: readText(formData, "description"),
 		author: { bio: readText(formData, "authorBio"), imageUrl: readText(formData, "authorImageUrl") },
 		socialLinks: parseSocialLinks(formData.get("socialLinks")),
@@ -146,6 +152,11 @@ export async function saveNewsletter(_state, formData) {
 	const values = readNewsletter(formData);
 	const error = validateNewsletter(values);
 	if (error) return { error };
+	const archiveHostProblem = getArchiveHostProblem(values.archiveHost, new URL(getAppUrl()).hostname);
+	if (archiveHostProblem) return { error: archiveHostProblem };
+	// A domain in the ARCHIVE_HOSTS environment variable belongs to the newsletter it names there.
+	const envOwner = parseArchiveHosts(process.env.ARCHIVE_HOSTS).get(values.archiveHost);
+	if (values.archiveHost && envOwner && envOwner !== values.slug) return { error: "This domain already serves another newsletter's archive." };
 	// Each workspace sends only from its own domains, even though they all share one SES account.
 	const domains = await listWorkspaceDomains(workspaceId);
 	if (!isSenderAllowed(domains, values.fromEmail)) {
@@ -157,8 +168,10 @@ export async function saveNewsletter(_state, formData) {
 	}
 	// A collapsed email section sends no fields, and what it had saved stays as it is.
 	const { welcome, confirmation, sequence, ...rest } = values;
+	const { archiveHost, ...fields } = rest;
 	const document = {
-		...rest,
+		...fields,
+		...(archiveHost && { archiveHost }),
 		socialLinks: values.socialLinks.links,
 		...(formData.has("welcomeSubject") && { welcome }),
 		...(formData.has("confirmationSubject") && { confirmation }),
@@ -169,7 +182,11 @@ export async function saveNewsletter(_state, formData) {
 	let createdId;
 	try {
 		if (id) {
-			const { matchedCount } = await Newsletter.updateOne({ _id: id, workspaceId }, { $set: document }, { runValidators: true });
+			const { matchedCount } = await Newsletter.updateOne(
+				{ _id: id, workspaceId },
+				{ $set: document, ...(!archiveHost && { $unset: { archiveHost: 1 } }) },
+				{ runValidators: true }
+			);
 			if (!matchedCount) return { error: "Newsletter not found" };
 		} else {
 			const workspace = await Workspace.findById(workspaceId).select({ limits: 1 }).lean();
@@ -182,8 +199,21 @@ export async function saveNewsletter(_state, formData) {
 			createdId = (await Newsletter.create({ ...document, workspaceId }))._id.toString();
 		}
 	} catch (error) {
-		if (error?.code === 11000) return { error: "This slug is already used" };
+		if (error?.code === 11000) {
+			return { error: String(error.message).includes("archiveHost") ? "This domain already serves another archive." : "This slug is already used" };
+		}
 		throw error;
+	}
+	if (archiveHost) {
+		clearArchiveHostCache();
+		// Pointing the domain at this app is the platform owner's step on the hosting side.
+		await sendAlert({
+			key: `archive-host:${values.slug}:${archiveHost}`,
+			title: "Archive domain set",
+			detail: `${archiveHost} now serves the archive of "${values.name}". Point it at this app and attach it in your hosting panel if you haven't.`,
+			path: "/newsletters",
+			cooldownMinutes: 1,
+		});
 	}
 
 	revalidatePath("/newsletters");

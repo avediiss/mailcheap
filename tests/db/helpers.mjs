@@ -31,7 +31,7 @@ export async function startDb() {
 }
 
 async function loadModels() {
-	const names = ["Alert", "ApiKey", "Campaign", "Contact", "Domain", "Event", "Membership", "Message", "Newsletter", "Suppression", "User", "Workspace"];
+	const names = ["Alert", "ApiKey", "Campaign", "Contact", "Domain", "Event", "Invitation", "Membership", "Message", "Newsletter", "Suppression", "User", "Workspace"];
 	const loaded = await Promise.all(names.map((name) => import(`@/models/${name}`)));
 	return Object.fromEntries(names.map((name, index) => [name, loaded[index].default]));
 }
@@ -40,6 +40,9 @@ export function resetRequest() {
 	globalThis.__testRequest = { cookies: new Map(), headers: new Map() };
 	globalThis.__afterTasks = [];
 	globalThis.__sentEmails = [];
+	globalThis.__sesIdentities = new Set();
+	globalThis.__sesBehavior = undefined;
+	globalThis.__sesDomains = [];
 }
 
 export async function loginAs(user) {

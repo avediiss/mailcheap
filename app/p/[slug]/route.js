@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
 	await connectDb();
 	const campaign = await Campaign.findOne({ archiveSlug: slug }).select("newsletterId").lean();
 	const newsletter =
-		campaign && (await Newsletter.findOne({ _id: campaign.newsletterId, archiveEnabled: true }).select("slug").lean());
+		campaign && (await Newsletter.findOne({ _id: campaign.newsletterId, archiveEnabled: true }).select("slug archiveHost").lean());
 	if (!newsletter) return new Response("Not found", { status: 404 });
 
 	// APP_URL, not request.url: behind a reverse proxy the request URL is the server's internal address.
