@@ -3,11 +3,14 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { notifyActivity } from "@/lib/alerts";
-import { isValidLogin, startSession } from "@/lib/auth";
+import { authenticate, startSession } from "@/lib/auth";
 import { getConfigProblems } from "@/lib/config";
 import { getClientIp, isRateLimited } from "@/lib/rate-limit";
+import { normalizeLoginEmail } from "@/lib/session-rules";
 
 const ATTEMPTS_PER_IP = { name: "login-ip", limit: 10, window: "15 m" };
+// Guessing one account from many addresses is stopped here.
+const ATTEMPTS_PER_EMAIL = { name: "login-email", limit: 10, window: "15 m" };
 
 function safeNextPath(value) {
 	return typeof value === "string" && /^\/(?!\/)[\w\-/]*$/.test(value) ? value : "/";
@@ -21,16 +24,20 @@ export async function login(_state, formData) {
 		return { error: "Too many attempts. Try again in 15 minutes." };
 	}
 
-	const email = formData.get("email");
+	const email = normalizeLoginEmail(formData.get("email"));
 	const password = formData.get("password");
+	if (email && (await isRateLimited({ ...ATTEMPTS_PER_EMAIL, key: email }))) {
+		return { error: "Too many attempts. Try again in 15 minutes." };
+	}
 
-	if (!isValidLogin(email, password)) {
-		// Slow down guessing; the admin account is the only account.
+	const user = await authenticate(email, password);
+	if (!user) {
+		// Slow down guessing.
 		await new Promise((resolve) => setTimeout(resolve, 800));
 		return { error: "Wrong email or password" };
 	}
 
-	await startSession(process.env.ADMIN_EMAIL);
-	await notifyActivity(["New login"], { withUserAgent: true });
+	await startSession(user);
+	await notifyActivity([`New login: ${user.email}`], { withUserAgent: true });
 	redirect(safeNextPath(formData.get("next")));
 }

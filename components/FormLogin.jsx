@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { login } from "@/app/login/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,9 @@ export default function FormLogin({ next }) {
 				{isPending ? <Loader2 className="animate-spin" /> : "Continue"}
 				{!isPending && <ArrowRight data-icon="inline-end" />}
 			</Button>
+			<Link href="/forgot-password" className="text-center text-sm text-muted-foreground hover:underline">
+				Forgot your password?
+			</Link>
 		</form>
 	);
 }

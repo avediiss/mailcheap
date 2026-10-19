@@ -25,43 +25,45 @@ async function withEnv(values, run) {
 	}
 }
 
-test("a session lasts 7 days and verifies while the admin login is unchanged", async () => {
-	const token = await signSessionToken("admin@example.com");
+const USER_ID = "65f000000000000000000009";
+
+test("a session lasts 7 days and says who it belongs to and which sign-out number it has", async () => {
+	const token = await signSessionToken({ userId: USER_ID, sessionVersion: 3 });
 	const { iat, exp } = decodeJwt(token);
 	assert.equal(SESSION_MAX_AGE, 7 * 24 * 60 * 60);
 	assert.equal(exp - iat, SESSION_MAX_AGE);
-	assert.deepEqual(await verifySessionToken(token), { email: "admin@example.com" });
+	assert.deepEqual(await verifySessionToken(token), { userId: USER_ID, sessionVersion: 3 });
+	assert.equal((await verifySessionToken(await signSessionToken({ userId: USER_ID }))).sessionVersion, 0);
 });
 
-test("changing the admin password or email signs out every session", async () => {
-	const token = await signSessionToken("admin@example.com");
-	await withEnv({ ADMIN_PASSWORD: "a new password here" }, async () => {
-		assert.equal(await verifySessionToken(token), null);
+test("the admin environment settings no longer decide who is signed in", async () => {
+	const token = await signSessionToken({ userId: USER_ID, sessionVersion: 0 });
+	await withEnv({ ADMIN_PASSWORD: "a new password here", ADMIN_EMAIL: "other@example.com" }, async () => {
+		assert.deepEqual(await verifySessionToken(token), { userId: USER_ID, sessionVersion: 0 });
 	});
-	await withEnv({ ADMIN_EMAIL: "other@example.com" }, async () => {
-		assert.equal(await verifySessionToken(token), null);
-	});
-	assert.deepEqual(await verifySessionToken(token), { email: "admin@example.com" });
 });
 
 test("sessions are signed with their own key, not SESSION_SECRET itself", async () => {
 	const rawKey = new TextEncoder().encode(process.env.SESSION_SECRET);
-	const { v } = decodeJwt(await signSessionToken("admin@example.com"));
-	for (const claims of [{ email: "admin@example.com" }, { email: "admin@example.com", v }]) {
-		const forged = await new SignJWT(claims).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(rawKey);
-		assert.equal(await verifySessionToken(forged), null);
-	}
+	const forged = await new SignJWT({ uid: USER_ID, sv: 0 }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(rawKey);
+	assert.equal(await verifySessionToken(forged), null);
 
-	const token = await signSessionToken("admin@example.com");
+	const token = await signSessionToken({ userId: USER_ID });
 	await withEnv({ SESSION_SECRET: "t".repeat(40) }, async () => {
 		assert.equal(await verifySessionToken(token), null);
 	});
 	await withEnv({ SESSION_SECRET: "s".repeat(31) }, async () => {
 		assert.equal(await verifySessionToken(token), null);
-		await assert.rejects(signSessionToken("admin@example.com"), /at least 32 characters/);
+		await assert.rejects(signSessionToken({ userId: USER_ID }), /at least 32 characters/);
 	});
 	assert.equal(await verifySessionToken(`${token}x`), null);
 	assert.equal(await verifySessionToken(""), null);
+});
+
+test("a cookie from before user accounts, signed correctly but with no user id, is refused", async () => {
+	const key = new TextEncoder().encode(process.env.SESSION_SECRET);
+	const legacy = await new SignJWT({ email: "admin@example.com", v: "x" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(key);
+	assert.equal(await verifySessionToken(legacy), null);
 });
 
 // Signed with SESSION_SECRET = "s" x 40. Email links don't use the session key: changing how they're signed

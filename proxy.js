@@ -6,6 +6,8 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 const PUBLIC_PATHS = [
 	/^\/favicon\.ico$/,
 	/^\/login$/,
+	/^\/forgot-password$/,
+	/^\/reset-password$/,
 	/^\/unsubscribe$/,
 	/^\/confirm$/,
 	/^\/keep$/,
