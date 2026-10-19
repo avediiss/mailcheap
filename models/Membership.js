@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
-// owner: manages members, domains and API keys. editor: newsletters, campaigns and contacts.
-export const ROLES = ["owner", "editor"];
+import { ROLES } from "../lib/roles.js";
+
+export { ROLES };
 
 const membershipSchema = new mongoose.Schema(
 	{

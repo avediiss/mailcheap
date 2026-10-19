@@ -16,7 +16,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { describeRole, roleLabel } from "@/lib/invitation-rules";
+import { describeRole, roleLabel } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 export default function DialogInviteMember() {
@@ -62,7 +62,7 @@ function FormInvite() {
 							: `${state.reason} Share this link with them instead. It works for 7 days.`}
 					</DialogDescription>
 				</DialogHeader>
-				<div className="flex items-center gap-1 rounded-lg bg-muted py-1 pr-1 pl-3">
+				<div className="flex w-full min-w-0 items-center gap-1 rounded-lg bg-muted py-1 pr-1 pl-3">
 					<code className="min-w-0 flex-1 truncate font-mono text-[13px]">{state.link}</code>
 					<ButtonCopy value={state.link} label="Copy link" />
 				</div>

@@ -8,7 +8,8 @@ function hueOf(text) {
 }
 
 export function getInitials(name) {
-	const words = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+	// Words that start with a letter or digit: "Avedis (platform owner)" is A and P, not A and "(".
+	const words = String(name ?? "").split(/\s+/).map((word) => word.replace(/^[^\p{L}\p{N}]+/u, "")).filter(Boolean);
 	if (words.length === 0) return "?";
 	const letters = words.length === 1 ? words[0].slice(0, 2) : words[0][0] + words[1][0];
 	return letters.toUpperCase();

@@ -6,6 +6,7 @@ import ButtonRefresh from "@/components/ButtonRefresh";
 import DialogAddDomain from "@/components/DialogAddDomain";
 import HeaderPage from "@/components/HeaderPage";
 import ImageFavicon from "@/components/ImageFavicon";
+import ButtonSetUpDomain from "@/components/ButtonSetUpDomain";
 import MenuDomain from "@/components/MenuDomain";
 import SkeletonDomains from "@/components/SkeletonDomains";
 import StateEmpty from "@/components/StateEmpty";
@@ -97,6 +98,7 @@ async function ListDomains({ workspaceId, canManage }) {
 						<div className="flex flex-wrap items-center gap-2">
 							{domain.dkimStatus && <StatusPill label="DKIM" status={domain.dkimStatus} />}
 							{domain.mailFromDomain && <StatusPill label="Return path" status={domain.mailFromStatus} />}
+							{canManage && domain.status.key === "missing" && <ButtonSetUpDomain id={domain.id} />}
 							<BadgeStatus status={domain.status.key} label={domain.status.label} />
 							{canManage && <MenuDomain id={domain.id} domain={domain.domain} />}
 						</div>

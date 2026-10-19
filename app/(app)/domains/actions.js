@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isValidObjectId } from "mongoose";
 import { notifyActivity } from "@/lib/alerts";
-import { addWorkspaceDomain, removeWorkspaceDomain } from "@/lib/domains";
+import { addWorkspaceDomain, removeWorkspaceDomain, setUpWorkspaceDomain } from "@/lib/domains";
 import { isRateLimited } from "@/lib/rate-limit";
 import { requireWorkspace } from "@/lib/workspace";
 import { hasRole } from "@/lib/workspace-rules";
@@ -41,6 +41,15 @@ export async function removeDomain(domainId) {
 	if (error) return { error };
 	if (!isValidObjectId(domainId)) return { error: "Domain not found" };
 	const result = await removeWorkspaceDomain({ workspaceId: context.workspaceId, domainId });
+	if (result.ok) revalidatePath("/domains");
+	return result;
+}
+
+export async function setUpDomain(domainId) {
+	const { context, error } = await requireOwner();
+	if (error) return { error };
+	if (!isValidObjectId(domainId)) return { error: "Domain not found" };
+	const result = await setUpWorkspaceDomain({ workspaceId: context.workspaceId, domainId });
 	if (result.ok) revalidatePath("/domains");
 	return result;
 }

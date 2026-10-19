@@ -4,7 +4,7 @@ import HeaderPage from "@/components/HeaderPage";
 import ListInvitations from "@/components/ListInvitations";
 import ListMembers from "@/components/ListMembers";
 import { formatDate, formatRelative } from "@/lib/format";
-import { describeRole, roleLabel } from "@/lib/invitation-rules";
+import { describeRole, roleLabel } from "@/lib/roles";
 import { listInvitations, listMembers } from "@/lib/members";
 import { requireWorkspace } from "@/lib/workspace";
 import { hasRole } from "@/lib/workspace-rules";

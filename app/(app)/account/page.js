@@ -1,7 +1,7 @@
 import AvatarInitials from "@/components/AvatarInitials";
 import { ButtonSignOutEverywhere, FormPassword, FormProfile } from "@/components/FormAccount";
 import HeaderPage from "@/components/HeaderPage";
-import { roleLabel } from "@/lib/invitation-rules";
+import { roleLabel } from "@/lib/roles";
 import { requireWorkspace } from "@/lib/workspace";
 
 export const metadata = { title: "Account" };

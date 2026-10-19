@@ -13,7 +13,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --test \"tests/*.test.mjs\"",
-    "test:db": "node --conditions=react-server --import ./tests/db/register.mjs --test \"tests/db/*.test.mjs\""
+    "test:db": "node --conditions=react-server --import ./tests/db/register.mjs --test \"tests/db/*.test.mjs\"",
+    "dev:demo": "node scripts/dev-demo.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1150.0",

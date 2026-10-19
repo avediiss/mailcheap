@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { roleLabel } from "@/lib/invitation-rules";
+import { roleLabel } from "@/lib/roles";
 
 export default function ListMembers({ members, currentUserId, canManage }) {
 	const [removing, setRemoving] = useState(null);

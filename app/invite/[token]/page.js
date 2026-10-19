@@ -4,7 +4,6 @@ import { FormAcceptInvite, FormJoinWorkspace } from "@/components/FormAcceptInvi
 import LogoMailcheap from "@/components/LogoMailcheap";
 import { Button } from "@/components/ui/button";
 import { getSession } from "@/lib/auth";
-import { roleLabel } from "@/lib/invitation-rules";
 import { findInvitationByToken } from "@/lib/members";
 
 export const metadata = { title: "Join a workspace", referrer: "no-referrer" };

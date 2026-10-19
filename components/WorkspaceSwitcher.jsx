@@ -14,7 +14,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { roleLabel } from "@/lib/invitation-rules";
+import { roleLabel } from "@/lib/roles";
 
 // Shows which workspace you're working in. With several, it's a menu to move between them; with one it
 // is only a label, since there's nothing to choose.

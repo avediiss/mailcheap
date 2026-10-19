@@ -148,6 +148,26 @@ test("the domain list shows each domain's live state, and survives SES being dow
 	assert.ok(down.domains.every(({ status }) => status.key === "unknown"));
 });
 
+test("a domain on the list that SES doesn't have yet can be set up, by an owner, in its own workspace", async () => {
+	const { setUpDomain } = await import("@/app/(app)/domains/actions");
+	const pending = await db.models.Domain.create({ workspaceId: a.workspace._id, domain: "assigned.io" });
+
+	await loginAs(a.editor);
+	assert.equal((await setUpDomain(id(pending))).error, "Only a workspace owner can manage domains");
+	await loginAs(b.owner);
+	assert.equal((await setUpDomain(id(pending))).error, "Domain not found");
+	assert.equal(globalThis.__sesIdentities.size, 0);
+
+	await loginAs(a.owner);
+	globalThis.__sesBehavior = { create: "denied" };
+	assert.match((await setUpDomain(id(pending))).error, /ses:CreateEmailIdentity/);
+	globalThis.__sesBehavior = undefined;
+	assert.deepEqual(await setUpDomain(id(pending)), { ok: true });
+	assert.ok(globalThis.__sesIdentities.has("assigned.io"));
+	assert.equal((await db.models.Domain.findById(pending._id)).createdInSes, true);
+	assert.deepEqual(await setUpDomain(id(pending)), { ok: true }, "doing it twice is harmless");
+});
+
 test("account: the name can be set and cleared", async () => {
 	const { updateProfile } = await import("@/app/(app)/account/actions");
 	await loginAs(a.owner);

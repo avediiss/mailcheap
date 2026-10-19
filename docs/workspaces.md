@@ -45,3 +45,28 @@ Do this **before** deploying the workspace version: the new code only shows data
   MongoDB (mongodb-memory-server, downloaded once into `node_modules/.cache`). SES and Next's cookies are
   stand-ins (tests/db/stubs). `tests/db/isolation.test.mjs` is the workspace-isolation suite: add a case
   there for every new place that reads or writes tenant data.
+
+## Running the workspace screens
+
+- **Members** (`/members`): owners invite by email with a role, resend, copy a new link, revoke, change roles and
+  remove people. Invitation links work for 7 days, once. A workspace always keeps at least one owner.
+  Editors see the list read-only.
+- **Domains** (`/domains`): owners add a domain, which creates a sending identity in the platform's SES account and
+  shows the DNS records. A workspace can't take a domain, parent or subdomain another workspace holds.
+- **Archive domain**: set per newsletter in its settings (no redeploy). The platform owner gets an alert to point
+  the domain at the app and attach it on the hosting side. `ARCHIVE_HOSTS` still works.
+- **Account** (`/account`): name, password, "sign out everywhere".
+
+### What the platform needs for this
+
+1. **PLATFORM_FROM** (or ALERT_FROM): the sender of invitation and password-reset emails, on a verified domain.
+   Without it the invite dialog gives the owner the link to share by hand.
+2. **More AWS permissions** for the SES user (the dashboard only read before): `ses:CreateEmailIdentity`,
+   `ses:PutEmailIdentityMailFromAttributes` and `ses:DeleteEmailIdentity`. Without them "Add domain" says so
+   plainly and nothing is half-created.
+
+### Looking at it locally
+
+`npm run dev:demo` starts the whole app on a throwaway database with three seeded workspaces (an owner, an editor,
+a suspended one, pending invitations, domains in different states). Nothing touches production or AWS, and
+sending is off. The log-in details are printed when it starts.

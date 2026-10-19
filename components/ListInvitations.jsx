@@ -8,7 +8,7 @@ import DialogConfirm from "@/components/DialogConfirm";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { roleLabel } from "@/lib/invitation-rules";
+import { roleLabel } from "@/lib/roles";
 
 export default function ListInvitations({ invitations, canManage }) {
 	const [revoking, setRevoking] = useState(null);

@@ -29,7 +29,7 @@ export default function MenuUser({ name, email }) {
 					<AvatarInitials name={display} size={28} />
 				</button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" side="top" className="w-60">
+			<DropdownMenuContent align="end" side="top" sideOffset={8} collisionPadding={12} className="w-52">
 				<DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
 					{name && <span className="truncate text-sm font-medium text-foreground">{name}</span>}
 					<span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
