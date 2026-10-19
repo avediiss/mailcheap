@@ -5,6 +5,7 @@ import HeaderPage from "@/components/HeaderPage";
 import StateEmpty from "@/components/StateEmpty";
 import { Button } from "@/components/ui/button";
 import { listNewslettersWithActiveCounts } from "@/lib/contacts";
+import { requireWorkspace } from "@/lib/workspace";
 import { connectDb } from "@/lib/db";
 import { formatNumber } from "@/lib/format";
 
@@ -12,7 +13,8 @@ export const metadata = { title: "Newsletters" };
 
 export default async function NewslettersPage() {
 	await connectDb();
-	const newsletters = await listNewslettersWithActiveCounts();
+	const { workspaceId } = await requireWorkspace();
+	const newsletters = await listNewslettersWithActiveCounts(workspaceId);
 
 	return (
 		<>

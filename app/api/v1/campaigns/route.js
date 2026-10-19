@@ -69,13 +69,14 @@ function readInput(body) {
 export async function GET(request) {
 	const apiKey = await authenticateRequest(request);
 	if (!apiKey) return fail(401, "Invalid API key");
+	if (!apiKey.isWorkspaceActive) return fail(403, "This workspace is suspended");
 	if (await isRateLimited({ ...READS_PER_KEY, key: String(apiKey._id) })) return fail(429, "Too many requests");
 
 	const slug = new URL(request.url).searchParams.get("newsletter")?.trim().toLowerCase();
 	if (!slug) return fail(400, "newsletter is required");
 
 	await connectDb();
-	const newsletter = await Newsletter.findOne({ slug }).select({ _id: 1, slug: 1, archiveEnabled: 1 }).lean();
+	const newsletter = await Newsletter.findOne({ slug, workspaceId: apiKey.workspaceId }).select({ _id: 1, slug: 1, archiveEnabled: 1 }).lean();
 	if (!newsletter) return fail(404, "Newsletter not found");
 
 	const issues = await listPublishedIssues(newsletter._id);
@@ -95,16 +96,18 @@ export async function GET(request) {
 export async function POST(request) {
 	const apiKey = await authenticateRequest(request);
 	if (!apiKey) return fail(401, "Invalid API key");
+	if (!apiKey.isWorkspaceActive) return fail(403, "This workspace is suspended");
 	if (await isRateLimited({ ...DRAFTS_PER_KEY, key: String(apiKey._id) })) return fail(429, "Too many drafts");
 
 	const input = readInput(await request.json().catch(() => null));
 	if (input.error) return fail(400, input.error);
 
 	await connectDb();
-	const newsletter = await Newsletter.findOne({ slug: input.slug }).select({ _id: 1 }).lean();
+	const newsletter = await Newsletter.findOne({ slug: input.slug, workspaceId: apiKey.workspaceId }).select({ _id: 1 }).lean();
 	if (!newsletter) return fail(404, "Newsletter not found");
 
 	const campaign = await Campaign.create({
+		workspaceId: apiKey.workspaceId,
 		newsletterId: newsletter._id,
 		subject: input.subject,
 		previewText: input.previewText,

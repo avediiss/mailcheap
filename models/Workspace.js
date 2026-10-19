@@ -1,0 +1,20 @@
+import mongoose from "mongoose";
+
+export const WORKSPACE_STATUSES = ["active", "suspended"];
+
+// A client, or one of the owner's brands: its own newsletters, contacts, campaigns, keys and domains.
+// null in a limit means no limit.
+const limit = { type: Number, min: 0, default: null };
+
+const workspaceSchema = new mongoose.Schema(
+	{
+		name: { type: String, required: true, trim: true, maxlength: 80 },
+		slug: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 40 },
+		// Suspended: can't send or take API signups. The platform owner can still read it.
+		status: { type: String, enum: WORKSPACE_STATUSES, default: "active" },
+		limits: { contacts: limit, emailsPerMonth: limit, newsletters: limit },
+	},
+	{ timestamps: true }
+);
+
+export default mongoose.models.Workspace || mongoose.model("Workspace", workspaceSchema);

@@ -3,10 +3,10 @@ import LogoMailcheap from "@/components/LogoMailcheap";
 import NavFooter from "@/components/NavFooter";
 import NavLinks from "@/components/NavLinks";
 import NavMobile from "@/components/NavMobile";
-import { requireSession } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/workspace";
 
 export default async function AppLayout({ children }) {
-	await requireSession();
+	await requireWorkspace();
 
 	return (
 		<div className="flex min-h-dvh flex-col md:flex-row">

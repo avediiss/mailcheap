@@ -7,7 +7,6 @@ import { VARIANTS, isAbTest } from "@/lib/ab-test";
 import { notifyActivity } from "@/lib/alerts";
 import { PUBLISHED_STATUSES, revalidateArchive } from "@/lib/archive-data";
 import { normalizeSegment } from "@/lib/audience";
-import { requireSession } from "@/lib/auth";
 import { getAppUrl, isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { getScheduleProblem } from "@/lib/schedule";
@@ -17,6 +16,7 @@ import { getSendProblem } from "@/lib/sending-rules";
 import { ARCHIVE_SLUG_PATTERN } from "@/lib/slug";
 import { firstImageUrl } from "@/lib/thumbnail";
 import { MAX_BODY_BYTES } from "@/lib/validation";
+import { requireWorkspace } from "@/lib/workspace";
 import Campaign from "@/models/Campaign";
 import Newsletter from "@/models/Newsletter";
 
@@ -38,20 +38,21 @@ function formatCount(count) {
 	return count.toLocaleString("en-US");
 }
 
+// Found only inside the signed-in person's workspace: another workspace's campaign is "not found", never "forbidden".
 async function findCampaign(id) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(id)) return null;
 	await connectDb();
-	return Campaign.findById(id);
+	return Campaign.findOne({ _id: id, workspaceId });
 }
 
 export async function createCampaign(newsletterId) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(newsletterId)) return { error: "Newsletter not found" };
 	await connectDb();
-	if (!(await Newsletter.exists({ _id: newsletterId }))) return { error: "Newsletter not found" };
+	if (!(await Newsletter.exists({ _id: newsletterId, workspaceId }))) return { error: "Newsletter not found" };
 
-	const campaign = await Campaign.create({ newsletterId });
+	const campaign = await Campaign.create({ workspaceId, newsletterId });
 	revalidatePath("/campaigns");
 	redirect(`/campaigns/${campaign._id}`);
 }
@@ -112,9 +113,12 @@ export async function sendTestCampaign(id) {
 	const campaign = await findCampaign(id);
 	if (!campaign) return { error: "Campaign not found" };
 	if (!isSendingEnabled()) return { error: "Sending is off" };
+	// The test goes to the person who clicked it, not to the platform owner.
+	const { session, isSuspended } = await requireWorkspace();
+	if (isSuspended) return { error: "This workspace is suspended" };
 
 	const result = await runSend(() =>
-		sendTestEmail({ campaignId: campaign._id.toString(), to: process.env.ADMIN_EMAIL })
+		sendTestEmail({ campaignId: campaign._id.toString(), to: session.email })
 	);
 	revalidatePath(`/campaigns/${id}`);
 	return result;
@@ -202,8 +206,10 @@ export async function unscheduleCampaign(id) {
 
 // The send dialogs ask when they open: it walks the whole list.
 export async function previewCleanup(id) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(id)) return { error: "Campaign not found" };
+	await connectDb();
+	if (!(await Campaign.exists({ _id: id, workspaceId }))) return { error: "Campaign not found" };
 	try {
 		return await getCleanupPreview(id);
 	} catch (error) {
@@ -263,6 +269,7 @@ export async function duplicateCampaign(id) {
 	if (!campaign) return { error: "Campaign not found" };
 
 	const copy = await Campaign.create({
+		workspaceId: campaign.workspaceId,
 		newsletterId: campaign.newsletterId,
 		subject: campaign.subject ? `${campaign.subject.slice(0, MAX_SUBJECT_LENGTH - COPY_SUFFIX.length)}${COPY_SUFFIX}` : "",
 		previewText: campaign.previewText,
@@ -308,6 +315,7 @@ export async function resendToNonOpeners(id) {
 	}
 
 	const copy = await Campaign.create({
+		workspaceId: campaign.workspaceId,
 		newsletterId: campaign.newsletterId,
 		subject: campaign.subject,
 		previewText: campaign.previewText,

@@ -16,13 +16,19 @@ import {
 import { getAppUrl } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { formatDate, formatRelative } from "@/lib/format";
+import { requireWorkspace } from "@/lib/workspace";
+import { hasRole } from "@/lib/workspace-rules";
 import ApiKey from "@/models/ApiKey";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "API keys" };
 
 export default async function ApiKeysPage() {
+	const { workspaceId, role } = await requireWorkspace();
+	// Keys reach everything in the workspace, so only its owners see and manage them.
+	if (!hasRole(role, "owner")) redirect("/");
 	await connectDb();
-	const apiKeys = await ApiKey.find().sort({ createdAt: -1 }).select("-hash").lean();
+	const apiKeys = await ApiKey.find({ workspaceId }).sort({ createdAt: -1 }).select("-hash").lean();
 	const examples = getExamples(getAppUrl());
 
 	return (

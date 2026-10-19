@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 const newsletterSchema = new mongoose.Schema(
 	{
+		// Who owns it. Everything under a newsletter (contacts, campaigns, messages) carries the same workspaceId.
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
 		name: { type: String, required: true, trim: true },
 		slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
 		imageUrl: { type: String, trim: true },

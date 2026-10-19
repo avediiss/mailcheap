@@ -2,7 +2,6 @@
 
 import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
-import { requireSession } from "@/lib/auth";
 import { withEngagement } from "@/lib/cleanup";
 import { getErasedEmail, getSuppressionReasonOnDelete } from "@/lib/contact-delete";
 import { importContactRows } from "@/lib/contact-import";
@@ -10,21 +9,29 @@ import { MAX_IMPORT_ROWS_PER_REQUEST, normalizeTags } from "@/lib/csv-import";
 import { connectDb } from "@/lib/db";
 import { toFirstName } from "@/lib/merge-tags";
 import { normalizeEmail } from "@/lib/validation";
+import { requireWorkspace } from "@/lib/workspace";
+import { getSuppressionScope } from "@/lib/workspace-rules";
 import Contact from "@/models/Contact";
 import Event from "@/models/Event";
 import Message from "@/models/Message";
 import Newsletter from "@/models/Newsletter";
 import Suppression from "@/models/Suppression";
 
+// The newsletter must belong to the signed-in person's workspace; its workspaceId then goes on every contact.
+async function findOwnNewsletter(workspaceId, newsletterId) {
+	if (!isValidObjectId(newsletterId)) return null;
+	return Newsletter.findOne({ _id: newsletterId, workspaceId }).select({ _id: 1, workspaceId: 1 }).lean();
+}
+
 export async function importContacts({ newsletterId, rows }) {
-	await requireSession();
-	if (!isValidObjectId(newsletterId)) return { error: "Newsletter not found" };
+	const { workspaceId } = await requireWorkspace();
 	if (!Array.isArray(rows) || rows.length > MAX_IMPORT_ROWS_PER_REQUEST) return { error: "Too many rows" };
 
 	await connectDb();
-	if (!(await Newsletter.exists({ _id: newsletterId }))) return { error: "Newsletter not found" };
+	const newsletter = await findOwnNewsletter(workspaceId, newsletterId);
+	if (!newsletter) return { error: "Newsletter not found" };
 
-	const result = await importContactRows({ newsletterId, rows });
+	const result = await importContactRows({ workspaceId, newsletterId: newsletter._id, rows });
 	revalidatePath("/contacts");
 	return result;
 }
@@ -32,20 +39,21 @@ export async function importContacts({ newsletterId, rows }) {
 // Adds one contact by hand. It goes through the same import rules as a CSV row, so an address that
 // unsubscribed, bounced or complained keeps that status and is not re-added.
 export async function addContact({ newsletterId, email, firstName, tags }) {
-	await requireSession();
-	if (!isValidObjectId(newsletterId)) return { error: "Newsletter not found" };
+	const { workspaceId } = await requireWorkspace();
 	const normalized = normalizeEmail(email);
 	if (!normalized) return { error: "Enter a valid email address" };
 
 	await connectDb();
-	if (!(await Newsletter.exists({ _id: newsletterId }))) return { error: "Newsletter not found" };
+	const newsletter = await findOwnNewsletter(workspaceId, newsletterId);
+	if (!newsletter) return { error: "Newsletter not found" };
 
 	const { created } = await importContactRows({
-		newsletterId,
+		workspaceId,
+		newsletterId: newsletter._id,
 		rows: [{ email: normalized, status: "active", firstName, tags }],
 		source: "manual",
 	});
-	const contact = await Contact.findOne({ newsletterId, email: normalized }).select({ status: 1 }).lean();
+	const contact = await Contact.findOne({ workspaceId, newsletterId: newsletter._id, email: normalized }).select({ status: 1 }).lean();
 	revalidatePath("/contacts");
 	return { email: normalized, created: created > 0, status: contact?.status };
 }
@@ -53,14 +61,14 @@ export async function addContact({ newsletterId, email, firstName, tags }) {
 // The Edit dialog: a first name for {{first_name}}, and the tags the campaign's "To" menu sends to. The tags
 // replace the old ones, since the dialog shows them all.
 export async function updateContact({ id, firstName, tags }) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(id)) return { error: "Invalid request" };
 	const name = toFirstName(firstName);
 	const labels = normalizeTags(tags);
 
 	await connectDb();
 	const { matchedCount } = await Contact.updateOne(
-		{ _id: id },
+		{ _id: id, workspaceId },
 		name ? { $set: { firstName: name, tags: labels } } : { $set: { tags: labels }, $unset: { firstName: 1 } }
 	);
 	revalidatePath("/contacts");
@@ -69,25 +77,26 @@ export async function updateContact({ id, firstName, tags }) {
 
 // Erasure on request. See lib/contact-delete.js for what is removed and what stays.
 export async function deleteContact(id) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(id)) return { error: "Invalid request" };
 
 	await connectDb();
-	const contact = await Contact.findById(id).select({ email: 1, status: 1 }).lean();
+	const contact = await Contact.findOne({ _id: id, workspaceId }).select({ email: 1, status: 1 }).lean();
 	if (!contact) return { error: "Contact not found" };
 
 	const reason = getSuppressionReasonOnDelete(contact.status);
 	if (reason) {
 		await Suppression.updateOne(
-			{ email: contact.email },
+			{ email: contact.email, workspaceId: getSuppressionScope(reason, workspaceId) },
 			{ $setOnInsert: { reason, detail: "contact deleted" } },
 			{ upsert: true }
 		);
 	}
 	const erasedEmail = getErasedEmail(contact._id);
 	await Promise.all([
-		Message.updateMany({ contactId: contact._id }, { $set: { email: erasedEmail } }),
-		Event.updateMany({ email: contact.email }, { $set: { email: erasedEmail } }),
+		Message.updateMany({ contactId: contact._id, workspaceId }, { $set: { email: erasedEmail } }),
+		// Only this workspace's events: the same address may be a contact of another workspace too.
+		Event.updateMany({ email: contact.email, workspaceId }, { $set: { email: erasedEmail } }),
 	]);
 	await Contact.deleteOne({ _id: contact._id });
 	revalidatePath("/contacts");
@@ -95,7 +104,7 @@ export async function deleteContact(id) {
 }
 
 export async function setContactStatus(id, status) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(id) || !["active", "unsubscribed"].includes(status)) {
 		return { error: "Invalid request" };
 	}
@@ -105,8 +114,8 @@ export async function setContactStatus(id, status) {
 	// starts the list cleanup over, or the next send would make them dormant again.
 	const filter =
 		status === "active"
-			? { _id: id, status: "dormant" }
-			: { _id: id, status: { $in: ["active", "dormant", "pending"] } };
+			? { _id: id, workspaceId, status: "dormant" }
+			: { _id: id, workspaceId, status: { $in: ["active", "dormant", "pending"] } };
 	const update =
 		status === "active"
 			? withEngagement({ $set: { status } })

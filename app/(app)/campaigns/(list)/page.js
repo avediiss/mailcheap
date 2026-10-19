@@ -6,6 +6,7 @@ import TableCampaigns from "@/components/TableCampaigns";
 import { getIssuePageUrl } from "@/lib/archive-data";
 import { recentCampaignsPipeline } from "@/lib/campaign-queries";
 import { connectDb } from "@/lib/db";
+import { requireWorkspace } from "@/lib/workspace";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
 import Campaign from "@/models/Campaign";
 import Newsletter from "@/models/Newsletter";
@@ -13,10 +14,11 @@ import Newsletter from "@/models/Newsletter";
 export const metadata = { title: "Campaigns" };
 
 export default async function CampaignsPage() {
+	const { workspaceId } = await requireWorkspace();
 	await connectDb();
 	const [campaigns, newsletters] = await Promise.all([
-		Campaign.aggregate(recentCampaignsPipeline(200)),
-		Newsletter.find()
+		Campaign.aggregate(recentCampaignsPipeline(200, workspaceId)),
+		Newsletter.find({ workspaceId })
 			.sort({ createdAt: 1 })
 			.select(`${NEWSLETTER_SUMMARY_FIELDS} archiveEnabled`)
 			.lean(),

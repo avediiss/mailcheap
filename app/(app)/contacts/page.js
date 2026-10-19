@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { buildContactFilters, readContactFilters } from "@/lib/contact-filter";
 import { connectDb } from "@/lib/db";
+import { requireWorkspace } from "@/lib/workspace";
 import { formatDate, formatNumber } from "@/lib/format";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
 import { cn } from "@/lib/utils";
@@ -35,16 +36,17 @@ export const metadata = { title: "Contacts" };
 const PAGE_SIZE = 50;
 
 export default async function ContactsPage({ searchParams }) {
+	const { workspaceId } = await requireWorkspace();
 	const params = await searchParams;
 	const { newsletterId, status, query } = readContactFilters(params);
 	const page = Math.max(1, Number.parseInt(params.page, 10) || 1);
 
 	await connectDb();
-	const newsletters = await Newsletter.find().sort({ createdAt: 1 }).select(NEWSLETTER_SUMMARY_FIELDS).lean();
+	const newsletters = await Newsletter.find({ workspaceId }).sort({ createdAt: 1 }).select(NEWSLETTER_SUMMARY_FIELDS).lean();
 	const newsletterOptions = toNewsletterOptions(newsletters);
 	const newsletterMap = toNewsletterMap(newsletters);
 
-	const { baseFilter, filter } = buildContactFilters({ newsletterId, status, query });
+	const { baseFilter, filter } = buildContactFilters({ workspaceId, newsletterId, status, query });
 	// The export downloads what the page shows: same newsletter, status and search.
 	const exportQuery = new URLSearchParams(
 		Object.entries({ newsletter: newsletterId, status, q: query }).filter(([, value]) => value)

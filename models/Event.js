@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const eventSchema = new mongoose.Schema(
 	{
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", index: true },
 		type: { type: String, required: true },
 		sesMessageId: { type: String, index: true },
 		messageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },

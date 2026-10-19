@@ -9,10 +9,13 @@ import StateEmpty from "@/components/StateEmpty";
 import { Button } from "@/components/ui/button";
 import { rootDomain } from "@/lib/favicon";
 import { listSesDomains } from "@/lib/ses";
+import { listWorkspaceDomains, requireWorkspace } from "@/lib/workspace";
+import { filterDomainsForWorkspace } from "@/lib/workspace-rules";
 
 export const metadata = { title: "Domains" };
 
-export default function DomainsPage() {
+export default async function DomainsPage() {
+	const { workspaceId, session } = await requireWorkspace();
 	const region = process.env.SES_REGION || "us-east-1";
 	return (
 		<>
@@ -37,14 +40,16 @@ export default function DomainsPage() {
 				</Button>
 			</HeaderPage>
 			<Suspense fallback={<SkeletonDomains />}>
-				<ListDomains />
+				<ListDomains workspaceId={workspaceId} />
 			</Suspense>
 		</>
 	);
 }
 
-async function ListDomains() {
-	const domains = await listSesDomains({ fresh: true });
+async function ListDomains({ workspaceId }) {
+	const all = await listSesDomains({ fresh: true });
+	// SES holds every workspace's domains in one account: a workspace sees only its own.
+	const domains = all.error ? all : filterDomainsForWorkspace(all, await listWorkspaceDomains(workspaceId));
 
 	if (domains.error) {
 		return (
@@ -53,7 +58,7 @@ async function ListDomains() {
 			</StateEmpty>
 		);
 	}
-	if (domains.length === 0) return <StateEmpty icon={Globe} title="No domains in SES" />;
+	if (domains.length === 0) return <StateEmpty icon={Globe} title="No domains yet" />;
 
 	return (
 		<div className="flex flex-col gap-3">
