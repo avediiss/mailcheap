@@ -19,6 +19,7 @@ import Message from "../models/Message.js";
 import Newsletter from "../models/Newsletter.js";
 import User from "../models/User.js";
 import Workspace from "../models/Workspace.js";
+import AuditLog from "../models/AuditLog.js";
 import ApiKey from "../models/ApiKey.js";
 
 const PORT = process.env.DEMO_PORT || "3100";
@@ -67,6 +68,27 @@ const birch = await user("owner@birch.test", "Birch Owner");
 const avedis = await tenant({ name: "Avedis", slug: "avedis", domain: "abakelianavedis.com", owner: root, newsletterName: "Avedis Notes", contacts: 12 });
 const acme = await tenant({ name: "Acme Studio", slug: "acme", domain: "acme-studio.test", owner: dana, editor: marcus, newsletterName: "Acme Notes", contacts: 34 });
 await tenant({ name: "Birch & Co", slug: "birch", status: "suspended", domain: "birch.test", owner: birch, newsletterName: "Birch Weekly", contacts: 8 });
+// Limits and sending history, so the platform console has something to show: Acme is close to its limits,
+// Birch has a bounce problem and is suspended.
+const birchWorkspace = await Workspace.findOne({ slug: "birch" });
+await Workspace.updateOne({ _id: acme.workspace._id }, { $set: { limits: { contacts: 40, emailsPerMonth: 100, newsletters: 3 } } });
+await Workspace.updateOne({ _id: birchWorkspace._id }, { $set: { limits: { contacts: 20, emailsPerMonth: 500, newsletters: 1 } } });
+const sends = (tenant, count, bounced) =>
+	Array.from({ length: count }, (_, index) => ({
+		kind: "welcome", workspaceId: tenant._id, newsletterId: null, email: `s${index}@example.com`, status: "sent",
+		sentAt: new Date(Date.now() - (index % 20) * DAY), ...(index < bounced && { bouncedAt: new Date() }),
+	}));
+const newsletterOf = async (tenant) => (await Newsletter.findOne({ workspaceId: tenant._id }))._id;
+for (const [tenant, count, bounced] of [[acme.workspace, 82, 1], [birchWorkspace, 70, 7], [avedis.workspace, 39, 1]]) {
+	const newsletterId = await newsletterOf(tenant);
+	await Message.insertMany(sends(tenant, count, bounced).map((message) => ({ ...message, newsletterId })));
+}
+for (const [workspaceId, action, actor] of [
+	[acme.workspace._id, "workspace.created", root], [acme.workspace._id, "workspace.limits", root],
+	[birchWorkspace._id, "workspace.created", root], [birchWorkspace._id, "workspace.suspended", root],
+]) {
+	await AuditLog.create({ workspaceId, action, actorId: actor._id, actorEmail: actor.email });
+}
 await Domain.create({ workspaceId: acme.workspace._id, domain: "studio-mail.test" });
 await Domain.create({ workspaceId: acme.workspace._id, domain: "not-yet-added.test" });
 await Membership.create({ userId: root._id, workspaceId: acme.workspace._id, role: "owner" }).catch(() => {});
@@ -92,7 +114,7 @@ const sesDomains = [
 ];
 
 console.log(`
-  Mailcheap demo
+  Namag demo
   --------------
   Open:      http://localhost:${PORT}
   Platform owner:   root@demo.test

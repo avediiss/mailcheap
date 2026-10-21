@@ -2,15 +2,16 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { ChevronRight, Newspaper, Settings2, TriangleAlert } from "lucide-react";
-import BadgeStatus from "@/components/BadgeStatus";
 import ButtonNewCampaign from "@/components/ButtonNewCampaign";
 import CardStat from "@/components/CardStat";
+import CardUsage from "@/components/CardUsage";
 import ChartSends from "@/components/ChartSends";
 import ChartSubscribers from "@/components/ChartSubscribers";
 import CookieTimezone from "@/components/CookieTimezone";
 import ListDomainStatus from "@/components/ListDomainStatus";
 import ListStats from "@/components/ListStats";
 import SkeletonCampaigns from "@/components/SkeletonCampaigns";
+import StripSesAccount from "@/components/StripSesAccount";
 import {
 	SkeletonDomainList,
 	SkeletonSends,
@@ -28,12 +29,13 @@ import { requireWorkspace, listWorkspaceDomains } from "@/lib/workspace";
 import { filterDomainsForWorkspace } from "@/lib/workspace-rules";
 import { listNewslettersWithActiveCounts } from "@/lib/contacts";
 import { connectDb } from "@/lib/db";
-import { formatCompact, formatNumber, formatSigned } from "@/lib/format";
+import { formatNumber, formatSigned } from "@/lib/format";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
 import { getEmailStats, getHourlySends, getSubscriberHistory } from "@/lib/overview-data";
 import { PERIOD_DAYS } from "@/lib/overview-series";
+import { getWorkspaceUsage } from "@/lib/quota";
 import { estimateCost, formatCost, getPricePer1000, startOfMonth } from "@/lib/send-cost";
-import { getSesAccount, listSesDomains } from "@/lib/ses";
+import { listSesDomains } from "@/lib/ses";
 import { TIME_ZONE_COOKIE, resolveTimeZone, timeZoneLabel } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import Campaign from "@/models/Campaign";
@@ -106,7 +108,7 @@ export default async function OverviewPage({ searchParams }) {
 
 						<Section title="This month" stagger={3}>
 							<Suspense key="send-cost" fallback={null}>
-								<CardSendCost workspaceId={workspaceId} newsletters={newsletters} />
+								<CardSendCost workspaceId={workspaceId} newsletters={newsletters} showCost={session.isPlatformAdmin} />
 							</Suspense>
 						</Section>
 
@@ -123,6 +125,10 @@ export default async function OverviewPage({ searchParams }) {
 						</Button>
 					</StateEmpty>
 				)}
+
+				<Suspense fallback={null}>
+					<SectionUsage workspaceId={workspaceId} />
+				</Suspense>
 
 				<Section title="Domains" href="/domains" stagger={4}>
 					<Suspense fallback={<SkeletonDomainList />}>
@@ -213,7 +219,7 @@ async function CardSends({ workspaceId, newsletterId, timeZone }) {
 
 // Amazon bills by the email, so this adds up every newsletter of the workspace. It's an estimate:
 // SES's own bill also has small items, and the price is SES_PRICE_PER_1000 (default $0.10).
-async function CardSendCost({ workspaceId, newsletters }) {
+async function CardSendCost({ workspaceId, newsletters, showCost }) {
 	const since = startOfMonth();
 	const counts = await Promise.all(
 		newsletters.map(({ _id }) =>
@@ -228,7 +234,8 @@ async function CardSendCost({ workspaceId, newsletters }) {
 			<CardStat
 				label="Emails sent this month"
 				value={formatNumber(emails)}
-				detail={`About ${formatCost(estimateCost(emails, price))} on Amazon SES, at $${price.toFixed(2)} per 1,000`}
+				// What each email costs is the platform owner's business, not the client's.
+				detail={showCost ? `About ${formatCost(estimateCost(emails, price))} on Amazon SES, at $${price.toFixed(2)} per 1,000` : undefined}
 			/>
 		</div>
 	);
@@ -251,6 +258,17 @@ async function TableRecentCampaigns({ workspaceId, newsletterId, newsletters }) 
 	);
 }
 
+// The allowance the platform owner set, with how much is used. Nothing shows when there are no limits.
+async function SectionUsage({ workspaceId }) {
+	const usage = await getWorkspaceUsage(workspaceId);
+	if (Object.values(usage.limits).every((limit) => limit === null)) return null;
+	return (
+		<Section title="Your plan" stagger={4}>
+			<CardUsage usage={usage} />
+		</Section>
+	);
+}
+
 async function SectionDomains({ workspaceId }) {
 	const all = await listSesDomains();
 	const domains = all.error ? all : filterDomainsForWorkspace(all, await listWorkspaceDomains(workspaceId));
@@ -267,61 +285,6 @@ async function SectionDomains({ workspaceId }) {
 	return (
 		<div className="animate-fade-in">
 			<ListDomainStatus domains={domains} />
-		</div>
-	);
-}
-
-async function StripSesAccount() {
-	const account = await getSesAccount();
-
-	if (account.error) {
-		return (
-			<p className="flex items-center gap-3 rounded-xl px-4 py-4 text-sm text-muted-foreground shadow-border animate-fade-in">
-				<TriangleAlert className="size-4 shrink-0 text-amber-500" />
-				<span className="truncate">SES unreachable: {account.error}</span>
-			</p>
-		);
-	}
-
-	const accountLabel = account.productionAccess
-		? "Production"
-		: account.reviewStatus === "PENDING"
-			? "Sandbox, in review"
-			: "Sandbox";
-	const quotaUsed = account.max24HourSend ? Math.min(account.sentLast24Hours / account.max24HourSend, 1) : 0;
-	const items = [
-		{
-			label: "SES account",
-			value: <BadgeStatus status={account.productionAccess ? "active" : "sandbox"} label={accountLabel} />,
-		},
-		{ label: "Health", value: <BadgeStatus status={account.enforcementStatus} /> },
-		{
-			label: "Daily quota",
-			value: (
-				<span className="flex w-full flex-col gap-1.5">
-					{formatNumber(account.sentLast24Hours)} / {formatCompact(account.max24HourSend)}
-					<span className="h-1 w-full max-w-32 overflow-hidden rounded-full bg-muted">
-						<span
-							className="block h-full rounded-full bg-foreground/70"
-							style={{ width: `${Math.max(quotaUsed * 100, quotaUsed > 0 ? 2 : 0)}%` }}
-						/>
-					</span>
-				</span>
-			),
-		},
-		{ label: "Max rate", value: `${formatNumber(account.maxSendRate)}/s` },
-	];
-
-	return (
-		<div className="overflow-hidden rounded-xl bg-card shadow-border animate-fade-in">
-			<dl className="grid grid-cols-2 gap-px bg-border/60 lg:grid-cols-4">
-				{items.map(({ label, value }) => (
-					<div key={label} className="flex min-h-[66px] flex-col items-start justify-center gap-1.5 bg-card px-4 py-3">
-						<dt className="text-xs text-muted-foreground">{label}</dt>
-						<dd className="w-full text-sm font-medium tabular-nums">{value}</dd>
-					</div>
-				))}
-			</dl>
 		</div>
 	);
 }

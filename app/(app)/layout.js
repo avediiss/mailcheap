@@ -21,12 +21,12 @@ export default async function AppLayout({ children }) {
 					<span className="text-sm font-semibold tracking-tight">{APP_NAME}</span>
 				</Link>
 				<div className="mb-4">{switcher}</div>
-				<NavLinks role={role} />
+				<NavLinks role={role} isPlatformAdmin={session.isPlatformAdmin} />
 				<div className="mt-auto">
 					<NavFooter user={user} />
 				</div>
 			</aside>
-			<NavMobile footer={<NavFooter user={user} />} switcher={switcher} role={role} />
+			<NavMobile footer={<NavFooter user={user} />} switcher={switcher} role={role} isPlatformAdmin={session.isPlatformAdmin} />
 			<main className="min-w-0 flex-1">
 				<div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-10 md:py-10">
 					{isSuspended && <BannerSuspended workspaceName={workspace.name} />}

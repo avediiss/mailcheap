@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { limitNewContacts } from "../lib/contact-import.js";
 import {
 	HEALTH_LABELS,
+	describeAttention,
 	MIN_SENT_FOR_HEALTH,
 	formatLimit,
 	getContactRoom,
@@ -98,4 +99,16 @@ test("what needs attention comes first: at risk, then suspended, then full", () 
 	const near = { ...quiet, name: "near", contactsMeter: { state: "near" } };
 	assert.deepEqual(rankAttention([quiet, near, full, suspended, risky]).map(({ name }) => name), ["risky", "suspended", "full", "near"]);
 	assert.deepEqual(rankAttention([quiet]), []);
+});
+
+test("the attention list says why, most serious first", () => {
+	const base = { status: "active", health: "good", contactsMeter: { state: "ok" }, emailsMeter: { state: "ok" }, newslettersMeter: { state: "ok" } };
+	assert.deepEqual(describeAttention(base), []);
+	assert.deepEqual(describeAttention({ ...base, health: "bad", status: "suspended", emailsMeter: { state: "full" }, contactsMeter: { state: "near" } }), [
+		"Bounces or complaints are past the pause limit",
+		"Suspended",
+		"Emails limit reached",
+		"Contacts close to the limit",
+	]);
+	assert.deepEqual(describeAttention({ ...base, health: "watch" }), ["Bounces or complaints are getting close to the limit"]);
 });

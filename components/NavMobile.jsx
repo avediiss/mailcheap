@@ -9,7 +9,7 @@ import NavLinks from "@/components/NavLinks";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-export default function NavMobile({ footer, switcher, role }) {
+export default function NavMobile({ footer, switcher, role, isPlatformAdmin }) {
 	const [isOpen, setIsOpen] = useState(false);
 
 	return (
@@ -27,7 +27,7 @@ export default function NavMobile({ footer, switcher, role }) {
 				<SheetContent side="left" className="w-64 gap-0 p-3 pt-14">
 					<SheetTitle className="sr-only">Menu</SheetTitle>
 					{switcher && <div className="mb-3">{switcher}</div>}
-					<NavLinks onNavigate={() => setIsOpen(false)} role={role} />
+					<NavLinks onNavigate={() => setIsOpen(false)} role={role} isPlatformAdmin={isPlatformAdmin} />
 					<div className="mt-auto">{footer}</div>
 				</SheetContent>
 			</Sheet>
