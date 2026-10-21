@@ -1,12 +1,10 @@
-import { LogOut } from "lucide-react";
-import { logout } from "@/app/(app)/actions";
 import ButtonThemeToggle from "@/components/ButtonThemeToggle";
-import { Button } from "@/components/ui/button";
+import MenuUser from "@/components/MenuUser";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isSendingEnabled } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
-export default function NavFooter() {
+export default function NavFooter({ user }) {
 	const isOn = isSendingEnabled();
 
 	return (
@@ -29,16 +27,7 @@ export default function NavFooter() {
 			</Tooltip>
 			<div className="flex items-center">
 				<ButtonThemeToggle />
-				<form action={logout}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button type="submit" variant="ghost" size="icon" aria-label="Log out">
-								<LogOut />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>Log out</TooltipContent>
-					</Tooltip>
-				</form>
+				<MenuUser name={user.name} email={user.email} />
 			</div>
 		</div>
 	);

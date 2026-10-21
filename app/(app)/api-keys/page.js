@@ -16,20 +16,47 @@ import {
 import { getAppUrl } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { formatDate, formatRelative } from "@/lib/format";
+import { requireWorkspace } from "@/lib/workspace";
+import { hasRole } from "@/lib/workspace-rules";
 import ApiKey from "@/models/ApiKey";
+import Newsletter from "@/models/Newsletter";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "API keys" };
 
 export default async function ApiKeysPage() {
+	const { workspaceId, role, workspace } = await requireWorkspace();
+	// Keys reach everything in the workspace, so only its owners see and manage them.
+	if (!hasRole(role, "owner")) redirect("/");
 	await connectDb();
-	const apiKeys = await ApiKey.find().sort({ createdAt: -1 }).select("-hash").lean();
-	const examples = getExamples(getAppUrl());
+	const [apiKeys, newsletters] = await Promise.all([
+		ApiKey.find({ workspaceId }).sort({ createdAt: -1 }).select("-hash").lean(),
+		Newsletter.find({ workspaceId }).sort({ createdAt: 1 }).select({ name: 1, slug: 1 }).lean(),
+	]);
+	const examples = getExamples(getAppUrl(), newsletters[0]?.slug ?? "your-newsletter");
 
 	return (
 		<>
 			<HeaderPage title="API keys">
 				<DialogCreateApiKey />
 			</HeaderPage>
+
+			<p className="-mt-4 mb-6 max-w-2xl text-sm text-pretty text-muted-foreground animate-enter">
+				Keys for <span className="font-medium text-foreground">{workspace.name}</span>. Each key can add contacts and drafts to{" "}
+				{newsletters.length === 0 ? "the newsletters you create here" : "every newsletter in this workspace"}
+				{newsletters.length > 0 && (
+					<>
+						:{" "}
+						{newsletters.map(({ slug }, index) => (
+							<span key={slug}>
+								{index > 0 && ", "}
+								<code className="font-mono text-[13px] text-foreground">{slug}</code>
+							</span>
+						))}
+					</>
+				)}
+				. It can’t reach anything else.
+			</p>
 
 			<div className="flex flex-col gap-8">
 				{apiKeys.length === 0 ? (
@@ -90,21 +117,21 @@ export default async function ApiKeysPage() {
 	);
 }
 
-function getExamples(appUrl) {
+function getExamples(appUrl, slug) {
 	return [
 		{
 			title: "Add a contact",
 			code: `curl -X POST ${appUrl}/api/v1/contacts \\
   -H "Authorization: Bearer $MAILCHEAP_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"newsletter":"weekly","email":"jane@example.com","source":"website"}'`,
+  -d '{"newsletter":"${slug}","email":"jane@example.com","source":"website"}'`,
 		},
 		{
 			title: "Create a draft campaign",
 			code: `curl -X POST ${appUrl}/api/v1/campaigns \\
   -H "Authorization: Bearer $MAILCHEAP_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"newsletter":"weekly","subject":"This week","previewText":"...","html":"<html>...</html>"}'`,
+  -d '{"newsletter":"${slug}","subject":"This week","previewText":"...","html":"<html>...</html>"}'`,
 		},
 	];
 }

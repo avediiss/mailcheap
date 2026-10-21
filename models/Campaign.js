@@ -6,6 +6,7 @@ const counter = { type: Number, default: 0 };
 
 const campaignSchema = new mongoose.Schema(
 	{
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
 		newsletterId: { type: mongoose.Schema.Types.ObjectId, ref: "Newsletter", required: true },
 		subject: { type: String, trim: true, default: "" },
 		previewText: { type: String, trim: true, default: "" },
@@ -67,6 +68,7 @@ const campaignSchema = new mongoose.Schema(
 );
 
 campaignSchema.index({ newsletterId: 1, createdAt: -1 });
+campaignSchema.index({ workspaceId: 1, createdAt: -1 });
 campaignSchema.index({ status: 1 });
 campaignSchema.index({ startedAt: -1 });
 campaignSchema.index(

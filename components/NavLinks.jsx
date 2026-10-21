@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Globe, KeyRound, LayoutGrid, Newspaper, Send, Users } from "lucide-react";
+import { Globe, KeyRound, LayoutGrid, Newspaper, Send, UserCog, Users } from "lucide-react";
+import { hasRole } from "@/lib/workspace-rules";
 import { cn } from "@/lib/utils";
 
-export default function NavLinks({ onNavigate }) {
+export default function NavLinks({ onNavigate, role }) {
 	const pathname = usePathname();
 
 	return (
 		<nav className="flex flex-col gap-0.5">
-			{NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+			{NAV_ITEMS.filter(({ requires }) => !requires || hasRole(role, requires)).map(({ href, label, icon: Icon }) => {
 				const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
 				return (
 					<Link
@@ -40,5 +41,7 @@ const NAV_ITEMS = [
 	{ href: "/contacts", label: "Contacts", icon: Users },
 	{ href: "/newsletters", label: "Newsletters", icon: Newspaper },
 	{ href: "/domains", label: "Domains", icon: Globe },
-	{ href: "/api-keys", label: "API keys", icon: KeyRound },
+	{ href: "/members", label: "Members", icon: UserCog },
+	// Keys reach everything in the workspace, so only its owners see them.
+	{ href: "/api-keys", label: "API keys", icon: KeyRound, requires: "owner" },
 ];

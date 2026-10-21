@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { CSV_COLUMNS, CSV_HEADER_LINE, contactToCsvLine, escapeCsvCell } from "../lib/contacts-csv.js";
 import { buildContactFilters, readContactFilters } from "../lib/contact-filter.js";
 
+const workspaceId = "74f1a2b3c4d5e6f7a8b9c0d9";
 const newsletterId = "74f1a2b3c4d5e6f7a8b9c0d2";
 
 test("cells with commas, quotes or line breaks are quoted", () => {
@@ -60,10 +61,11 @@ test("filters are read from the address and invalid values are dropped", () => {
 });
 
 test("the filter matches the email's start only, with regex characters escaped", () => {
-	const { baseFilter, filter } = buildContactFilters({ newsletterId, status: "active", query: "a.b+c" });
+	const { baseFilter, filter } = buildContactFilters({ workspaceId, newsletterId, status: "active", query: "a.b+c" });
 	assert.equal(String(baseFilter.newsletterId), newsletterId);
 	assert.equal(baseFilter.email.$regex, "^a\\.b\\+c");
 	assert.equal(baseFilter.status, undefined);
 	assert.equal(filter.status, "active");
-	assert.deepEqual(buildContactFilters({ newsletterId: null, status: null, query: "" }).filter, {});
+	assert.deepEqual(buildContactFilters({ workspaceId, newsletterId: null, status: null, query: "" }).filter, { workspaceId });
+	assert.throws(() => buildContactFilters({ newsletterId, status: null, query: "" }), /workspaceId/, "never unscoped");
 });

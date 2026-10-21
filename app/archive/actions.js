@@ -14,6 +14,7 @@ import { queueWelcomeAndSeries } from "@/lib/sequence-jobs";
 import { notifyNewSubscriber } from "@/lib/signup-notice";
 import { normalizeEmail } from "@/lib/validation";
 import Newsletter from "@/models/Newsletter";
+import Workspace from "@/models/Workspace";
 
 const PER_IP = { name: "subscribe-ip", limit: 5, window: "10 m" };
 // Only alerts: refusing signups past a shared limit would let one flooder block every real signup.
@@ -37,6 +38,10 @@ export async function subscribe(_state, formData) {
 		archiveEnabled: true,
 	}).lean();
 	if (!newsletter) return { error: "This newsletter is not taking signups" };
+	// A suspended workspace takes no signups, even through its public form.
+	if (!(await Workspace.exists({ _id: newsletter.workspaceId, status: "active" }))) {
+		return { error: "This newsletter is not taking signups" };
+	}
 
 	if (await isRateLimited({ ...PER_NEWSLETTER, key: newsletter.slug })) {
 		after(() =>

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { getContactWrites, getStatusChanges } from "../lib/contact-import.js";
 
 const newsletterId = "74f1a2b3c4d5e6f7a8b9c0d2";
+const workspaceId = "74f1a2b3c4d5e6f7a8b9c0d9";
 const subscribedAt = new Date("2026-10-08T09:00:00.000Z");
 
 // Rows as sanitizeImportRow hands them over, one per status a CSV file can map to.
@@ -15,12 +16,12 @@ const contacts = [
 ];
 
 test("rows add the contacts a newsletter doesn't have and only make statuses stricter", () => {
-	const writes = getContactWrites({ newsletterId, contacts, source: "import" });
+	const writes = getContactWrites({ workspaceId, newsletterId, contacts, source: "import" });
 	assert.equal(writes.length, contacts.length);
 	assert.ok(writes.every(({ updateOne }) => updateOne.upsert === true));
 	assert.deepEqual(writes[0].updateOne.filter, { newsletterId, email: "new@example.com" });
 	assert.deepEqual(writes[0].updateOne.update, {
-		$setOnInsert: { status: "active", source: "import", subscribedAt },
+		$setOnInsert: { workspaceId, status: "active", source: "import", subscribedAt },
 		$set: { "imported.openRate": 0.5 },
 	});
 	assert.ok(writes[1].updateOne.update.$setOnInsert.unsubscribedAt instanceof Date);
@@ -33,7 +34,7 @@ test("rows add the contacts a newsletter doesn't have and only make statuses str
 });
 
 test("existing contacts never become active and contacts waiting to confirm stay as they are", () => {
-	const writes = getContactWrites({ newsletterId, contacts, source: "import" });
+	const writes = getContactWrites({ workspaceId, newsletterId, contacts, source: "import" });
 	for (const { updateOne } of writes) {
 		assert.ok(Object.keys(updateOne.update.$set ?? {}).every((key) => key.startsWith("imported.")));
 	}

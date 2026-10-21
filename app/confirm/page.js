@@ -42,7 +42,7 @@ async function getNewsletter(newsletterId) {
 	try {
 		await connectDb();
 		return await Newsletter.findById(newsletterId)
-			.select({ name: 1, slug: 1, fromName: 1, fromEmail: 1, archiveEnabled: 1 })
+			.select({ name: 1, slug: 1, fromName: 1, fromEmail: 1, archiveEnabled: 1, archiveHost: 1 })
 			.lean();
 	} catch (error) {
 		console.error("[confirm] Could not load the newsletter:", error.message);

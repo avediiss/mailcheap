@@ -12,7 +12,10 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"tests/*.test.mjs\""
+    "test": "node --test \"tests/*.test.mjs\"",
+    "test:db": "node --conditions=react-server --import ./tests/db/register.mjs --test \"tests/db/*.test.mjs\"",
+    "dev:demo": "node scripts/dev-demo.mjs",
+    "predeploy": "bash scripts/predeploy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1150.0",
@@ -50,6 +53,7 @@
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "mongodb-memory-server": "^11.3.0",
     "shadcn": "^4.21.1",
     "tailwindcss": "^4"
   }

@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 const newsletterSchema = new mongoose.Schema(
 	{
+		// Who owns it. Everything under a newsletter (contacts, campaigns, messages) carries the same workspaceId.
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
 		name: { type: String, required: true, trim: true },
 		slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
 		imageUrl: { type: String, trim: true },
@@ -10,6 +12,9 @@ const newsletterSchema = new mongoose.Schema(
 		replyTo: { type: String, lowercase: true, trim: true },
 		postalAddress: { type: String, trim: true },
 		archiveEnabled: { type: Boolean, default: false },
+		// The archive on its own domain (news.example.com). Set in the newsletter settings; the ARCHIVE_HOSTS
+		// environment variable still works for installs that already use it.
+		archiveHost: { type: String, lowercase: true, trim: true, maxlength: 253 },
 		description: { type: String, trim: true },
 		socialLinks: [{ type: String, trim: true }],
 		// The archive's author page; the author's name is fromName.
@@ -55,5 +60,8 @@ const newsletterSchema = new mongoose.Schema(
 	},
 	{ timestamps: true }
 );
+
+// A domain serves one archive. Only newsletters that have one are in the index.
+newsletterSchema.index({ archiveHost: 1 }, { unique: true, partialFilterExpression: { archiveHost: { $type: "string" } } });
 
 export default mongoose.models.Newsletter || mongoose.model("Newsletter", newsletterSchema);

@@ -4,7 +4,6 @@ import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { revalidateArchive } from "@/lib/archive-data";
-import { requireSession } from "@/lib/auth";
 import { CLEANUP_LIMITS } from "@/lib/cleanup";
 import { isSendingEnabled } from "@/lib/config";
 import { getConfirmationProblem } from "@/lib/confirmation-content";
@@ -13,7 +12,15 @@ import { MAX_AUTHOR_BIO_LENGTH, MAX_DESCRIPTION_LENGTH } from "@/lib/newsletters
 import { sendWelcomeTestEmail } from "@/lib/sending";
 import { getSequenceProblem, normalizeSteps } from "@/lib/sequence";
 import { parseSocialLinks } from "@/lib/social";
+import { clearArchiveHostCache } from "@/lib/archive-host-lookup";
+import { getArchiveHostProblem, parseArchiveHosts } from "@/lib/archive-hosts";
+import { sendAlert } from "@/lib/alerts";
+import { getAppUrl } from "@/lib/config";
+import { normalizeDomain } from "@/lib/domain-rules";
+import { listWorkspaceDomains, requireWorkspace } from "@/lib/workspace";
+import { getLimitProblem, isSenderAllowed } from "@/lib/workspace-rules";
 import Newsletter from "@/models/Newsletter";
+import Workspace from "@/models/Workspace";
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,6 +63,7 @@ function readNewsletter(formData) {
 		replyTo: readText(formData, "replyTo").toLowerCase(),
 		postalAddress: readText(formData, "postalAddress"),
 		archiveEnabled: formData.get("archiveEnabled") === "on",
+		archiveHost: normalizeDomain(readText(formData, "archiveHost")) ?? "",
 		description: readText(formData, "description"),
 		author: { bio: readText(formData, "authorBio"), imageUrl: readText(formData, "authorImageUrl") },
 		socialLinks: parseSocialLinks(formData.get("socialLinks")),
@@ -116,10 +124,14 @@ function validateNewsletter(values) {
 
 // Sending errors become toasts; a thrown error would replace the page with the error boundary.
 export async function sendWelcomeTest(newsletterId) {
-	await requireSession();
+	const { workspaceId, session, isSuspended } = await requireWorkspace();
 	if (!isSendingEnabled()) return { error: "Sending is off" };
+	if (isSuspended) return { error: "This workspace is suspended" };
+	if (!isValidObjectId(newsletterId)) return { error: "Newsletter not found" };
+	await connectDb();
+	if (!(await Newsletter.exists({ _id: newsletterId, workspaceId }))) return { error: "Newsletter not found" };
 	try {
-		await sendWelcomeTestEmail({ newsletterId, to: process.env.ADMIN_EMAIL });
+		await sendWelcomeTestEmail({ newsletterId, to: session.email });
 		return { ok: true };
 	} catch (error) {
 		console.error("[newsletters] Welcome test failed:", error);
@@ -128,17 +140,38 @@ export async function sendWelcomeTest(newsletterId) {
 }
 
 export async function saveNewsletter(_state, formData) {
-	await requireSession();
+	const { workspaceId } = await requireWorkspace();
 	const id = readText(formData, "id");
 	if (id && !isValidObjectId(id)) return { error: "Newsletter not found" };
+	// First thing: another workspace's id is "not found" whatever else is wrong with the form.
+	if (id) {
+		await connectDb();
+		if (!(await Newsletter.exists({ _id: id, workspaceId }))) return { error: "Newsletter not found" };
+	}
 
 	const values = readNewsletter(formData);
 	const error = validateNewsletter(values);
 	if (error) return { error };
+	const archiveHostProblem = getArchiveHostProblem(values.archiveHost, new URL(getAppUrl()).hostname);
+	if (archiveHostProblem) return { error: archiveHostProblem };
+	// A domain in the ARCHIVE_HOSTS environment variable belongs to the newsletter it names there.
+	const envOwner = parseArchiveHosts(process.env.ARCHIVE_HOSTS).get(values.archiveHost);
+	if (values.archiveHost && envOwner && envOwner !== values.slug) return { error: "This domain already serves another newsletter's archive." };
+	// Each workspace sends only from its own domains, even though they all share one SES account.
+	const domains = await listWorkspaceDomains(workspaceId);
+	if (!isSenderAllowed(domains, values.fromEmail)) {
+		return {
+			error: domains.length
+				? `From email must be on one of your domains: ${domains.join(", ")}`
+				: "Add a sending domain to this workspace before choosing a from email",
+		};
+	}
 	// A collapsed email section sends no fields, and what it had saved stays as it is.
 	const { welcome, confirmation, sequence, ...rest } = values;
+	const { archiveHost, ...fields } = rest;
 	const document = {
-		...rest,
+		...fields,
+		...(archiveHost && { archiveHost }),
 		socialLinks: values.socialLinks.links,
 		...(formData.has("welcomeSubject") && { welcome }),
 		...(formData.has("confirmationSubject") && { confirmation }),
@@ -148,11 +181,39 @@ export async function saveNewsletter(_state, formData) {
 	await connectDb();
 	let createdId;
 	try {
-		if (id) await Newsletter.updateOne({ _id: id }, { $set: document }, { runValidators: true });
-		else createdId = (await Newsletter.create(document))._id.toString();
+		if (id) {
+			const { matchedCount } = await Newsletter.updateOne(
+				{ _id: id, workspaceId },
+				{ $set: document, ...(!archiveHost && { $unset: { archiveHost: 1 } }) },
+				{ runValidators: true }
+			);
+			if (!matchedCount) return { error: "Newsletter not found" };
+		} else {
+			const workspace = await Workspace.findById(workspaceId).select({ limits: 1 }).lean();
+			const limitProblem = getLimitProblem({
+				limit: workspace?.limits?.newsletters,
+				current: await Newsletter.countDocuments({ workspaceId }),
+				noun: "newsletters",
+			});
+			if (limitProblem) return { error: limitProblem };
+			createdId = (await Newsletter.create({ ...document, workspaceId }))._id.toString();
+		}
 	} catch (error) {
-		if (error?.code === 11000) return { error: "This slug is already used" };
+		if (error?.code === 11000) {
+			return { error: String(error.message).includes("archiveHost") ? "This domain already serves another archive." : "This slug is already used" };
+		}
 		throw error;
+	}
+	if (archiveHost) {
+		clearArchiveHostCache();
+		// Pointing the domain at this app is the platform owner's step on the hosting side.
+		await sendAlert({
+			key: `archive-host:${values.slug}:${archiveHost}`,
+			title: "Archive domain set",
+			detail: `${archiveHost} now serves the archive of "${values.name}". Point it at this app and attach it in your hosting panel if you haven't.`,
+			path: "/newsletters",
+			cooldownMinutes: 1,
+		});
 	}
 
 	revalidatePath("/newsletters");

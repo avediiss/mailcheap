@@ -5,6 +5,7 @@ export const CONTACT_STATUSES = ["active", "pending", "unsubscribed", "bounced",
 
 const contactSchema = new mongoose.Schema(
 	{
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
 		newsletterId: { type: mongoose.Schema.Types.ObjectId, ref: "Newsletter", required: true },
 		email: { type: String, required: true, lowercase: true, trim: true },
 		status: { type: String, enum: CONTACT_STATUSES, default: "active" },

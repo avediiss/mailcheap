@@ -12,6 +12,7 @@ export const MESSAGE_STATUSES = [
 
 const messageSchema = new mongoose.Schema(
 	{
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
 		kind: { type: String, enum: ["campaign", "last-chance", "welcome", "confirmation", "test", "sequence"], required: true },
 		campaignId: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign" },
 		newsletterId: { type: mongoose.Schema.Types.ObjectId, ref: "Newsletter", required: true },
@@ -56,6 +57,8 @@ messageSchema.index({ sesMessageId: 1 }, { sparse: true });
 messageSchema.index({ kind: 1, createdAt: -1 });
 // The overview's emails sent per hour.
 messageSchema.index({ newsletterId: 1, sentAt: 1 });
+// Emails sent per workspace per month: limits and, later, billing.
+messageSchema.index({ workspaceId: 1, sentAt: 1 });
 messageSchema.index({ campaignId: 1, status: 1 });
 
 export default mongoose.models.Message || mongoose.model("Message", messageSchema);

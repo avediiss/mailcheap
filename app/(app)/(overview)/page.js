@@ -24,6 +24,8 @@ import TableCampaigns from "@/components/TableCampaigns";
 import TabsNewsletter from "@/components/TabsNewsletter";
 import { Button } from "@/components/ui/button";
 import { recentCampaignsPipeline } from "@/lib/campaign-queries";
+import { requireWorkspace, listWorkspaceDomains } from "@/lib/workspace";
+import { filterDomainsForWorkspace } from "@/lib/workspace-rules";
 import { listNewslettersWithActiveCounts } from "@/lib/contacts";
 import { connectDb } from "@/lib/db";
 import { formatCompact, formatNumber, formatSigned } from "@/lib/format";
@@ -40,9 +42,14 @@ import Message from "@/models/Message";
 // Everything above Domains is about one newsletter, the largest unless ?newsletter= picks one. The page
 // waits for one query (the tabs); every section then loads on its own behind a skeleton of its size.
 export default async function OverviewPage({ searchParams }) {
-	const [{ newsletter: newsletterParam }, cookieStore] = await Promise.all([searchParams, cookies(), connectDb()]);
+	const [{ newsletter: newsletterParam }, cookieStore, { workspaceId, session }] = await Promise.all([
+		searchParams,
+		cookies(),
+		requireWorkspace(),
+		connectDb(),
+	]);
 	const timeZone = resolveTimeZone(cookieStore.get(TIME_ZONE_COOKIE)?.value);
-	const newsletters = await listNewslettersWithActiveCounts(NEWSLETTER_SUMMARY_FIELDS);
+	const newsletters = await listNewslettersWithActiveCounts(workspaceId, NEWSLETTER_SUMMARY_FIELDS);
 	const bySize = newsletters.toSorted((a, b) => b.activeCount - a.activeCount);
 	const selected = bySize.find(({ _id }) => _id.toString() === newsletterParam) ?? bySize[0];
 	const selectedId = selected?._id.toString();
@@ -81,11 +88,11 @@ export default async function OverviewPage({ searchParams }) {
 						<Section title={`Last ${PERIOD_DAYS} days`} stagger={1}>
 							<div className="overflow-hidden rounded-2xl bg-card shadow-border">
 								<Suspense key={`stats-${selectedId}`} fallback={<SkeletonStats />}>
-									<StatsEmail newsletterId={selected._id} />
+									<StatsEmail workspaceId={workspaceId} newsletterId={selected._id} />
 								</Suspense>
 								<div className="border-t border-border/60">
 									<Suspense key={`subscribers-${selectedId}`} fallback={<SkeletonSubscribers />}>
-										<CardSubscribers newsletterId={selected._id} timeZone={timeZone} />
+										<CardSubscribers workspaceId={workspaceId} newsletterId={selected._id} timeZone={timeZone} />
 									</Suspense>
 								</div>
 							</div>
@@ -93,19 +100,19 @@ export default async function OverviewPage({ searchParams }) {
 
 						<Section title="Today" stagger={2}>
 							<Suspense key={`sends-${selectedId}`} fallback={<SkeletonSends />}>
-								<CardSends newsletterId={selected._id} timeZone={timeZone} />
+								<CardSends workspaceId={workspaceId} newsletterId={selected._id} timeZone={timeZone} />
 							</Suspense>
 						</Section>
 
 						<Section title="This month" stagger={3}>
 							<Suspense key="send-cost" fallback={null}>
-								<CardSendCost newsletters={newsletters} />
+								<CardSendCost workspaceId={workspaceId} newsletters={newsletters} />
 							</Suspense>
 						</Section>
 
 						<Section title="Campaigns" href="/campaigns" stagger={3}>
 							<Suspense key={`campaigns-${selectedId}`} fallback={<SkeletonCampaigns rows={5} />}>
-								<TableRecentCampaigns newsletterId={selected._id} newsletters={newsletters} />
+								<TableRecentCampaigns workspaceId={workspaceId} newsletterId={selected._id} newsletters={newsletters} />
 							</Suspense>
 						</Section>
 					</>
@@ -119,22 +126,25 @@ export default async function OverviewPage({ searchParams }) {
 
 				<Section title="Domains" href="/domains" stagger={4}>
 					<Suspense fallback={<SkeletonDomainList />}>
-						<SectionDomains />
+						<SectionDomains workspaceId={workspaceId} />
 					</Suspense>
 				</Section>
 
-				<Section title="System" stagger={5}>
-					<Suspense fallback={<SkeletonSesAccount />}>
-						<StripSesAccount />
-					</Suspense>
-				</Section>
+				{/* The SES account is shared by every workspace: its quota and health are the platform owner's. */}
+				{session.isPlatformAdmin && (
+					<Section title="System" stagger={5}>
+						<Suspense fallback={<SkeletonSesAccount />}>
+							<StripSesAccount />
+						</Suspense>
+					</Section>
+				)}
 			</div>
 		</>
 	);
 }
 
-async function StatsEmail({ newsletterId }) {
-	const stats = await getEmailStats({ newsletterId });
+async function StatsEmail({ workspaceId, newsletterId }) {
+	const stats = await getEmailStats({ workspaceId, newsletterId });
 	return (
 		<div className="animate-fade-in">
 			<ListStats current={stats.current} previous={stats.previous} />
@@ -142,8 +152,8 @@ async function StatsEmail({ newsletterId }) {
 	);
 }
 
-async function CardSubscribers({ newsletterId, timeZone }) {
-	const history = await getSubscriberHistory({ newsletterId, timeZone });
+async function CardSubscribers({ workspaceId, newsletterId, timeZone }) {
+	const history = await getSubscriberHistory({ workspaceId, newsletterId, timeZone });
 
 	return (
 		<div className="flex flex-col gap-6 p-5 animate-fade-in sm:p-6">
@@ -171,8 +181,8 @@ async function CardSubscribers({ newsletterId, timeZone }) {
 	);
 }
 
-async function CardSends({ newsletterId, timeZone }) {
-	const hours = await getHourlySends({ newsletterId, timeZone });
+async function CardSends({ workspaceId, newsletterId, timeZone }) {
+	const hours = await getHourlySends({ workspaceId, newsletterId, timeZone });
 	const sentToday = hours.reduce((sum, { today }) => sum + (today ?? 0), 0);
 	const sentYesterday = hours.reduce((sum, { yesterday }) => sum + yesterday, 0);
 
@@ -201,13 +211,13 @@ async function CardSends({ newsletterId, timeZone }) {
 	);
 }
 
-// Amazon bills by the email, for the whole account, so this adds up every newsletter. It's an estimate:
+// Amazon bills by the email, so this adds up every newsletter of the workspace. It's an estimate:
 // SES's own bill also has small items, and the price is SES_PRICE_PER_1000 (default $0.10).
-async function CardSendCost({ newsletters }) {
+async function CardSendCost({ workspaceId, newsletters }) {
 	const since = startOfMonth();
 	const counts = await Promise.all(
 		newsletters.map(({ _id }) =>
-			Message.countDocuments({ newsletterId: _id, sentAt: { $gte: since }, kind: { $ne: "test" } })
+			Message.countDocuments({ workspaceId, newsletterId: _id, sentAt: { $gte: since }, kind: { $ne: "test" } })
 		)
 	);
 	const emails = counts.reduce((sum, count) => sum + count, 0);
@@ -224,8 +234,8 @@ async function CardSendCost({ newsletters }) {
 	);
 }
 
-async function TableRecentCampaigns({ newsletterId, newsletters }) {
-	const campaigns = await Campaign.aggregate(recentCampaignsPipeline(5, newsletterId));
+async function TableRecentCampaigns({ workspaceId, newsletterId, newsletters }) {
+	const campaigns = await Campaign.aggregate(recentCampaignsPipeline(5, workspaceId, newsletterId));
 	if (campaigns.length === 0) {
 		return (
 			<p className="rounded-xl px-4 py-6 text-center text-sm text-muted-foreground shadow-border animate-fade-in">
@@ -241,8 +251,9 @@ async function TableRecentCampaigns({ newsletterId, newsletters }) {
 	);
 }
 
-async function SectionDomains() {
-	const domains = await listSesDomains();
+async function SectionDomains({ workspaceId }) {
+	const all = await listSesDomains();
+	const domains = all.error ? all : filterDomainsForWorkspace(all, await listWorkspaceDomains(workspaceId));
 
 	if (domains.error || domains.length === 0) {
 		return (

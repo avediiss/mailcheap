@@ -11,6 +11,8 @@ import { connectDb } from "@/lib/db";
 import { MESSAGE_STATS_GROUP } from "@/lib/message-stats";
 import { serialize } from "@/lib/serialize";
 import { listSesDomains } from "@/lib/ses";
+import { listWorkspaceDomains, requireWorkspace } from "@/lib/workspace";
+import { isSenderAllowed } from "@/lib/workspace-rules";
 import Campaign from "@/models/Campaign";
 import Message from "@/models/Message";
 import Newsletter from "@/models/Newsletter";
@@ -21,10 +23,12 @@ export default async function CampaignPage({ params }) {
 	const { id } = await params;
 	if (!isValidObjectId(id)) notFound();
 
+	const { workspaceId, session } = await requireWorkspace();
 	await connectDb();
-	const campaign = await Campaign.findById(id).lean();
+	// Found only inside the signed-in person's workspace: another workspace's campaign is a 404.
+	const campaign = await Campaign.findOne({ _id: id, workspaceId }).lean();
 	if (!campaign) notFound();
-	const newsletter = await Newsletter.findById(campaign.newsletterId).lean();
+	const newsletter = await Newsletter.findOne({ _id: campaign.newsletterId, workspaceId }).lean();
 	if (!newsletter) notFound();
 
 	if (!["draft", "scheduled"].includes(campaign.status)) {
@@ -48,16 +52,20 @@ export default async function CampaignPage({ params }) {
 		);
 	}
 
-	const [audienceCount, domains, sendTimes, segmentOptions, resendOrigin] = await Promise.all([
+	const [audienceCount, domains, ownDomains, sendTimes, segmentOptions, resendOrigin] = await Promise.all([
 		countAudience(campaign),
 		listSesDomains(),
+		listWorkspaceDomains(workspaceId),
 		getSendTimes(campaign),
-		getSegmentOptions(newsletter._id),
+		getSegmentOptions(workspaceId, newsletter._id),
 		getResendOrigin(campaign),
 	]);
 	const fromDomain = newsletter.fromEmail.split("@")[1];
+	// Verified in SES, and one of this workspace's own domains.
 	const isDomainVerified =
-		Array.isArray(domains) && domains.some(({ domain, verified }) => domain === fromDomain && verified);
+		isSenderAllowed(ownDomains, newsletter.fromEmail) &&
+		Array.isArray(domains) &&
+		domains.some(({ domain, verified }) => domain === fromDomain && verified);
 
 	return (
 		<FormCampaign
@@ -68,7 +76,7 @@ export default async function CampaignPage({ params }) {
 			resendOrigin={resendOrigin}
 			isDomainVerified={isDomainVerified}
 			isSendingEnabled={isSendingEnabled()}
-			testEmail={process.env.ADMIN_EMAIL}
+			testEmail={session.email}
 			sendTimes={sendTimes}
 			archiveUrlBase={newsletter.archiveEnabled ? getArchiveUrls(newsletter).absolutePost("") : null}
 		/>
@@ -77,10 +85,12 @@ export default async function CampaignPage({ params }) {
 
 // A newsletter's first issue borrows the times the other newsletters go out.
 async function getSendTimes(campaign) {
+	const { workspaceId } = campaign;
 	const own = await Campaign.aggregate(
-		sendTimesPipeline({ newsletterId: campaign.newsletterId, excludeId: campaign._id })
+		sendTimesPipeline({ workspaceId, newsletterId: campaign.newsletterId, excludeId: campaign._id })
 	);
-	const rows = own.length > 0 ? own : await Campaign.aggregate(sendTimesPipeline({ excludeId: campaign._id }));
+	// A first issue borrows the times of this workspace's other newsletters, never another workspace's.
+	const rows = own.length > 0 ? own : await Campaign.aggregate(sendTimesPipeline({ workspaceId, excludeId: campaign._id }));
 	return {
 		history: rows.map(({ at }) => at.toISOString()),
 		taken: own.filter(({ status }) => status === "scheduled").map(({ at }) => at.toISOString()),

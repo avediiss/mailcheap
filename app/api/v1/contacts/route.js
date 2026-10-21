@@ -57,6 +57,7 @@ function readInput(body) {
 export async function POST(request) {
 	const apiKey = await authenticateRequest(request);
 	if (!apiKey) return fail(401, "Invalid API key");
+	if (!apiKey.isWorkspaceActive) return fail(403, "This workspace is suspended");
 
 	const input = readInput(await request.json().catch(() => null));
 	if (input.error) return fail(400, input.error);
@@ -76,7 +77,8 @@ export async function POST(request) {
 	}
 
 	await connectDb();
-	const newsletter = await Newsletter.findOne({ slug: input.slug }).lean();
+	// Only this key's workspace: another workspace's newsletter answers "not found", exactly like a slug that doesn't exist.
+	const newsletter = await Newsletter.findOne({ slug: input.slug, workspaceId: apiKey.workspaceId }).lean();
 	if (!newsletter) return fail(404, "Newsletter not found");
 
 	const { contact, created } = await upsertContact({

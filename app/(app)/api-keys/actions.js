@@ -4,13 +4,15 @@ import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { notifyActivity } from "@/lib/alerts";
 import { generateApiKey } from "@/lib/api-keys";
-import { requireSession } from "@/lib/auth";
 import { getAppUrl } from "@/lib/config";
 import { connectDb } from "@/lib/db";
+import { requireWorkspace } from "@/lib/workspace";
+import { hasRole } from "@/lib/workspace-rules";
 import ApiKey from "@/models/ApiKey";
 
 export async function createApiKey(_state, formData) {
-	await requireSession();
+	const { workspaceId, role } = await requireWorkspace();
+	if (!hasRole(role, "owner")) return { error: "Only a workspace owner can create API keys" };
 	const name = String(formData.get("name") ?? "")
 		.trim()
 		.slice(0, 60);
@@ -18,7 +20,7 @@ export async function createApiKey(_state, formData) {
 
 	await connectDb();
 	const { key, prefix, hash } = generateApiKey();
-	await ApiKey.create({ name, prefix, hash });
+	await ApiKey.create({ workspaceId, name, prefix, hash });
 	await notifyActivity([`API key created: ${name}`, `${getAppUrl()}/api-keys`]);
 
 	revalidatePath("/api-keys");
@@ -26,11 +28,13 @@ export async function createApiKey(_state, formData) {
 }
 
 export async function revokeApiKey(id) {
-	await requireSession();
+	const { workspaceId, role } = await requireWorkspace();
+	if (!hasRole(role, "owner")) return { error: "Only a workspace owner can revoke API keys" };
 	if (!isValidObjectId(id)) return { error: "Key not found" };
 
 	await connectDb();
-	await ApiKey.updateOne({ _id: id, revokedAt: null }, { $set: { revokedAt: new Date() } });
+	// Scoped: another workspace's key id revokes nothing.
+	await ApiKey.updateOne({ _id: id, workspaceId, revokedAt: null }, { $set: { revokedAt: new Date() } });
 
 	revalidatePath("/api-keys");
 	return { ok: true };

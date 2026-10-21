@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { getArchiveHostUrl, getArchiveSlugForHost } from "@/lib/archive-hosts";
+import { buildArchiveHostUrl, getArchiveSlugFromPath } from "@/lib/archive-hosts";
+import { isDashboardHost, resolveArchiveHostForSlug, resolveArchiveSlug } from "@/lib/archive-host-lookup";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 
 // Reachable without a session: recipients, mail providers, AWS, QStash, and API-key clients.
 const PUBLIC_PATHS = [
 	/^\/favicon\.ico$/,
 	/^\/login$/,
+	/^\/forgot-password$/,
+	/^\/reset-password$/,
+	/^\/invite\//,
 	/^\/unsubscribe$/,
 	/^\/confirm$/,
 	/^\/keep$/,
@@ -36,7 +40,15 @@ function rewriteTo(request, pathname) {
 export async function proxy(request) {
 	const { pathname } = request.nextUrl;
 
-	const archiveSlug = getArchiveSlugForHost(request.headers.get("host"));
+	const host = request.headers.get("host");
+	let archiveSlug = null;
+	try {
+		archiveSlug = await resolveArchiveSlug(host);
+	} catch (error) {
+		console.error("[proxy] Archive domain lookup failed:", error.message);
+		// Never fall through to the dashboard on a domain that might be an archive's.
+		if (!isDashboardHost(host)) return new NextResponse("Temporarily unavailable", { status: 503 });
+	}
 	if (archiveSlug) {
 		if (pathname === "/") return rewriteTo(request, `/archive/${archiveSlug}`);
 		if (pathname === "/sitemap.xml") return rewriteTo(request, `/archive/${archiveSlug}/sitemap`);
@@ -53,8 +65,12 @@ export async function proxy(request) {
 	// HTML never shares the dashboard's origin; without one, the sanitizer, the frame's sandbox and the CSP
 	// guard it here. Local dev keeps every archive under /archive.
 	if (pathname.startsWith("/archive/") && process.env.NODE_ENV === "production" && !ARCHIVE_IMAGE_PATH_PATTERN.test(pathname)) {
-		const archiveUrl = getArchiveHostUrl(pathname, request.nextUrl.search);
-		if (archiveUrl) return NextResponse.redirect(archiveUrl, 308);
+		const slug = getArchiveSlugFromPath(pathname);
+		const archiveHost = slug && (await resolveArchiveHostForSlug(slug).catch(() => null));
+		if (archiveHost) {
+			const [, subpath] = /^\/archive\/[^/]+(\/.*)?$/.exec(pathname) ?? [];
+			return NextResponse.redirect(buildArchiveHostUrl(archiveHost, subpath, request.nextUrl.search), 308);
+		}
 	}
 
 	if (PUBLIC_PATHS.some((pattern) => pattern.test(pathname))) return NextResponse.next();

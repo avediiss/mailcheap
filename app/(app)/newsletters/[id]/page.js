@@ -4,8 +4,10 @@ import AvatarNewsletter from "@/components/AvatarNewsletter";
 import FormNewsletter from "@/components/FormNewsletter";
 import HeaderPage from "@/components/HeaderPage";
 import { cleanupTotalsPipeline } from "@/lib/cleanup";
-import { isSendingEnabled } from "@/lib/config";
+import { getAppUrl, isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
+import { listWorkspaceDomains, requireWorkspace } from "@/lib/workspace";
+import { filterDomainsForWorkspace } from "@/lib/workspace-rules";
 import { serialize } from "@/lib/serialize";
 import { listSesDomains } from "@/lib/ses";
 import Contact from "@/models/Contact";
@@ -18,16 +20,21 @@ export default async function NewsletterPage({ params }) {
 	const isNew = id === "new";
 	if (!isNew && !isValidObjectId(id)) notFound();
 
+	const { workspaceId, session } = await requireWorkspace();
 	await connectDb();
-	const [newsletter, domains, cleanupTotals] = await Promise.all([
-		isNew ? null : Newsletter.findById(id).lean(),
+	// Found only inside the signed-in person's workspace: another workspace's id is a 404, not a peek.
+	const [newsletter, domains, ownDomains] = await Promise.all([
+		isNew ? null : Newsletter.findOne({ _id: id, workspaceId }).lean(),
 		listSesDomains(),
-		isNew ? null : getCleanupTotals(id),
+		listWorkspaceDomains(workspaceId),
 	]);
 	if (!isNew && !newsletter) notFound();
+	const cleanupTotals = isNew ? null : await getCleanupTotals(workspaceId, id);
 
 	const verifiedDomains = Array.isArray(domains)
-		? domains.filter(({ verified }) => verified).map(({ domain }) => domain)
+		? filterDomainsForWorkspace(domains, ownDomains)
+				.filter(({ verified }) => verified)
+				.map(({ domain }) => domain)
 		: null;
 
 	return (
@@ -41,14 +48,15 @@ export default async function NewsletterPage({ params }) {
 				newsletter={newsletter ? serialize(newsletter) : null}
 				verifiedDomains={verifiedDomains}
 				isSendingEnabled={isSendingEnabled()}
-				testEmail={process.env.ADMIN_EMAIL}
+				testEmail={session.email}
 				cleanupTotals={cleanupTotals}
+				appHost={new URL(getAppUrl()).hostname}
 			/>
 		</>
 	);
 }
 
-async function getCleanupTotals(newsletterId) {
-	const [totals] = await Contact.aggregate(cleanupTotalsPipeline(new Types.ObjectId(newsletterId)));
+async function getCleanupTotals(workspaceId, newsletterId) {
+	const [totals] = await Contact.aggregate(cleanupTotalsPipeline(new Types.ObjectId(newsletterId), workspaceId));
 	return { waiting: totals?.waiting ?? 0, kept: totals?.kept ?? 0, dormant: totals?.dormant ?? 0 };
 }
