@@ -9,6 +9,7 @@ import { connectDb } from "@/lib/db";
 import { getInbox } from "@/lib/inbox-links";
 import { toFirstName } from "@/lib/merge-tags";
 import { getClientIp, isRateLimited } from "@/lib/rate-limit";
+import { QuotaError } from "@/lib/quota";
 import { queueConfirmationEmail } from "@/lib/sending";
 import { queueWelcomeAndSeries } from "@/lib/sequence-jobs";
 import { notifyNewSubscriber } from "@/lib/signup-notice";
@@ -55,13 +56,21 @@ export async function subscribe(_state, formData) {
 	}
 
 	const firstName = toFirstName(formData.get("firstName"));
-	const { contact, created } = await upsertContact({
-		newsletter,
-		email,
-		source: "website",
-		resubscribe: true,
-		firstName: firstName || undefined,
-	});
+	let outcome;
+	try {
+		outcome = await upsertContact({
+			newsletter,
+			email,
+			source: "website",
+			resubscribe: true,
+			firstName: firstName || undefined,
+		});
+	} catch (error) {
+		// A full workspace: the visitor isn't told why, only that signups are closed for now.
+		if (error instanceof QuotaError) return { error: "This newsletter is not taking signups right now" };
+		throw error;
+	}
+	const { contact, created } = outcome;
 	if (created) after(() => notifyNewSubscriber({ newsletter, contact }));
 	const isPending = contact.status === "pending";
 	if (isSendingEnabled() && (isPending || (created && contact.status === "active"))) {

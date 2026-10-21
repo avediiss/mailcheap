@@ -79,7 +79,7 @@ export default function DialogImportContacts({ newsletters, defaultNewsletterId 
 
 	function runImport() {
 		startImporting(async () => {
-			const totals = { created: 0, existing: 0, invalid: 0 };
+			const totals = { created: 0, existing: 0, invalid: 0, skippedOverLimit: 0 };
 			for (let start = 0; start < rows.length; start += MAX_IMPORT_ROWS_PER_REQUEST) {
 				setProgress(start / rows.length);
 				const result = await importContacts({
@@ -93,11 +93,17 @@ export default function DialogImportContacts({ newsletters, defaultNewsletterId 
 				totals.created += result.created;
 				totals.existing += result.existing;
 				totals.invalid += result.invalid;
+				totals.skippedOverLimit += result.skippedOverLimit ?? 0;
 			}
 			setProgress(1);
-			toast.success(
-				`${formatNumber(totals.created)} added, ${formatNumber(totals.existing)} already there`
-			);
+			toast.success(`${formatNumber(totals.created)} added, ${formatNumber(totals.existing)} already there`);
+			// The workspace's contact limit stopped some: say so, with what to do about it.
+			if (totals.skippedOverLimit > 0) {
+				toast.error(
+					`${formatNumber(totals.skippedOverLimit)} not added: this workspace has reached its contact limit. Ask the platform owner to raise it.`,
+					{ duration: 12000 }
+				);
+			}
 			setIsOpen(false);
 			reset();
 			router.refresh();
