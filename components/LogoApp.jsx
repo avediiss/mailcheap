@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export default function LogoMailcheap({ className }) {
+export default function LogoApp({ className }) {
 	return (
 		<svg viewBox="0 0 32 32" aria-hidden="true" className={cn("size-6 shrink-0", className)}>
 			<rect width="32" height="32" rx="9" className="fill-foreground" />

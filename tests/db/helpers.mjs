@@ -6,7 +6,7 @@ process.env.ADMIN_EMAIL ||= "owner@platform.test";
 process.env.ADMIN_PASSWORD ||= "platform owner password";
 // Sending is on so the real send path runs; the SES call itself is a recorder (stubs/ses.mjs).
 process.env.SENDING_ENABLED = "true";
-process.env.ALERT_FROM ||= "Mailcheap <alerts@platform.test>";
+process.env.ALERT_FROM ||= "Namag <alerts@platform.test>";
 
 // Everything is imported after MONGODB_URI is set, with the same "@/" paths the app uses.
 export async function startDb() {
@@ -31,7 +31,7 @@ export async function startDb() {
 }
 
 async function loadModels() {
-	const names = ["Alert", "ApiKey", "Campaign", "Contact", "Domain", "Event", "Invitation", "Membership", "Message", "Newsletter", "Suppression", "User", "Workspace"];
+	const names = ["Alert", "ApiKey", "AuditLog", "Campaign", "Contact", "Domain", "Event", "Invitation", "Membership", "Message", "Newsletter", "Suppression", "User", "Workspace"];
 	const loaded = await Promise.all(names.map((name) => import(`@/models/${name}`)));
 	return Object.fromEntries(names.map((name, index) => [name, loaded[index].default]));
 }

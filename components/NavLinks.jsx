@@ -2,36 +2,47 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Globe, KeyRound, LayoutGrid, Newspaper, Send, UserCog, Users } from "lucide-react";
+import { Building2, Globe, KeyRound, LayoutGrid, Newspaper, Send, ShieldCheck, UserCog, Users } from "lucide-react";
 import { hasRole } from "@/lib/workspace-rules";
 import { cn } from "@/lib/utils";
 
-export default function NavLinks({ onNavigate, role }) {
+export default function NavLinks({ onNavigate, role, isPlatformAdmin = false }) {
 	const pathname = usePathname();
+
+	const items = NAV_ITEMS.filter(({ requires }) => !requires || hasRole(role, requires));
 
 	return (
 		<nav className="flex flex-col gap-0.5">
-			{NAV_ITEMS.filter(({ requires }) => !requires || hasRole(role, requires)).map(({ href, label, icon: Icon }) => {
-				const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
-				return (
-					<Link
-						key={href}
-						href={href}
-						onClick={onNavigate}
-						aria-current={isActive ? "page" : undefined}
-						className={cn(
-							"flex h-9 items-center gap-2.5 rounded-lg pr-3 pl-2.5 text-sm font-medium transition-colors duration-150",
-							isActive
-								? "bg-muted text-foreground"
-								: "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-						)}
-					>
-						<Icon className="size-4" />
-						{label}
-					</Link>
-				);
-			})}
+			{items.map((item) => (
+				<NavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+			))}
+			{isPlatformAdmin && (
+				<>
+					<span className="mt-4 mb-1 px-2.5 text-xs font-medium text-muted-foreground/70">Platform</span>
+					{PLATFORM_ITEMS.map((item) => (
+						<NavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+					))}
+				</>
+			)}
 		</nav>
+	);
+}
+
+function NavItem({ item: { href, label, icon: Icon, exact }, pathname, onNavigate }) {
+	const isActive = href === "/" || exact ? pathname === href : pathname.startsWith(href);
+	return (
+		<Link
+			href={href}
+			onClick={onNavigate}
+			aria-current={isActive ? "page" : undefined}
+			className={cn(
+				"flex h-9 items-center gap-2.5 rounded-lg pr-3 pl-2.5 text-sm font-medium transition-colors duration-150",
+				isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+			)}
+		>
+			<Icon className="size-4" />
+			{label}
+		</Link>
 	);
 }
 
@@ -44,4 +55,10 @@ const NAV_ITEMS = [
 	{ href: "/members", label: "Members", icon: UserCog },
 	// Keys reach everything in the workspace, so only its owners see them.
 	{ href: "/api-keys", label: "API keys", icon: KeyRound, requires: "owner" },
+];
+
+// The platform owner's own pages, apart from any one workspace.
+const PLATFORM_ITEMS = [
+	{ href: "/platform", label: "Overview", icon: ShieldCheck, exact: true },
+	{ href: "/platform/workspaces", label: "Workspaces", icon: Building2 },
 ];

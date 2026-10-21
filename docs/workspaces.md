@@ -1,6 +1,6 @@
 # Workspaces
 
-One Mailcheap install serves many **workspaces**: each client, or each of the owner's own brands, with its
+One Namag install serves many **workspaces**: each client, or each of the owner's own brands, with its
 own newsletters, contacts, campaigns, stats, API keys, sending domains and logins. A person in one workspace
 can't see or change another's.
 
@@ -70,3 +70,31 @@ Do this **before** deploying the workspace version: the new code only shows data
 `npm run dev:demo` starts the whole app on a throwaway database with three seeded workspaces (an owner, an editor,
 a suspended one, pending invitations, domains in different states). Nothing touches production or AWS, and
 sending is off. The log-in details are printed when it starts.
+
+## The platform console (Phase 4)
+
+Only the platform owner sees the **Platform** section of the menu.
+
+- **Overview** (`/platform`): workspaces, contacts, emails this month and the 30-day bounce rate across everyone, the
+  shared SES account's quota and health, a **Needs attention** list that says why (past the pause limit, suspended,
+  at or near a limit) and recent activity.
+- **Workspaces** (`/platform/workspaces`): every client with their usage against limits and deliverability. On a
+  phone each is a card.
+- **A workspace** (`/platform/workspaces/<id>`): usage, deliverability, name and limits (editable), people and
+  pending invitations, newsletters, domains and an activity log. **Open workspace** steps into it as an owner;
+  **Suspend/Resume** stops or restores sending, public signups and the API.
+- **New workspace**: a name, the first owner's email and optional limits. The owner gets an invitation by email, or a
+  link to hand over when email isn't set up.
+
+### Limits (all optional; empty means none)
+
+| Limit | What it counts | What happens at the limit |
+|---|---|---|
+| Contacts | people who can be emailed (active, pending, dormant) | signups, the API and manual add stop; a CSV import adds as many new people as fit and says how many it left out |
+| Emails per month | everything sent except test emails, from the 1st (UTC) | a send that won't fit is refused before it starts; one under way pauses and tells the owners; welcome and confirmation emails fail with the reason |
+| Newsletters | how many the workspace has | a new one can't be created |
+
+Workspace people see their own usage ("Your plan" on the overview) but never what an email costs you.
+
+Everything the platform owner does to a workspace, and every time they step into one they aren't a member of, is
+kept in an activity log (`AuditLog`).

@@ -9,6 +9,7 @@ import { MAX_IMPORT_ROWS_PER_REQUEST, normalizeTags } from "@/lib/csv-import";
 import { connectDb } from "@/lib/db";
 import { toFirstName } from "@/lib/merge-tags";
 import { normalizeEmail } from "@/lib/validation";
+import { CONTACT_LIMIT_MESSAGE, getContactRoomFor } from "@/lib/quota";
 import { requireWorkspace } from "@/lib/workspace";
 import { getSuppressionScope } from "@/lib/workspace-rules";
 import Contact from "@/models/Contact";
@@ -31,7 +32,8 @@ export async function importContacts({ newsletterId, rows }) {
 	const newsletter = await findOwnNewsletter(workspaceId, newsletterId);
 	if (!newsletter) return { error: "Newsletter not found" };
 
-	const result = await importContactRows({ workspaceId, newsletterId: newsletter._id, rows });
+	const { room } = await getContactRoomFor(workspaceId);
+	const result = await importContactRows({ workspaceId, newsletterId: newsletter._id, rows, room });
 	revalidatePath("/contacts");
 	return result;
 }
@@ -47,12 +49,15 @@ export async function addContact({ newsletterId, email, firstName, tags }) {
 	const newsletter = await findOwnNewsletter(workspaceId, newsletterId);
 	if (!newsletter) return { error: "Newsletter not found" };
 
-	const { created } = await importContactRows({
+	const { room } = await getContactRoomFor(workspaceId);
+	const { created, skippedOverLimit } = await importContactRows({
 		workspaceId,
 		newsletterId: newsletter._id,
+		room,
 		rows: [{ email: normalized, status: "active", firstName, tags }],
 		source: "manual",
 	});
+	if (skippedOverLimit > 0) return { error: CONTACT_LIMIT_MESSAGE };
 	const contact = await Contact.findOne({ workspaceId, newsletterId: newsletter._id, email: normalized }).select({ status: 1 }).lean();
 	revalidatePath("/contacts");
 	return { email: normalized, created: created > 0, status: contact?.status };

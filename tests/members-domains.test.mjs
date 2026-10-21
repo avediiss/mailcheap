@@ -70,7 +70,7 @@ test("a workspace never loses its last owner", () => {
 
 test("the invitation email names the workspace and role, links, and escapes names", () => {
 	const email = buildInvitationEmail({ url: "https://app.example.com/invite/abc", workspaceName: "<i>Acme</i>", inviterName: "Ana", role: "owner" });
-	assert.equal(email.subject, "Ana invited you to <i>Acme</i> on Mailcheap");
+	assert.equal(email.subject, "Ana invited you to <i>Acme</i> on Namag");
 	assert.ok(email.text.includes("https://app.example.com/invite/abc") && email.text.includes("an owner"));
 	assert.ok(!email.html.includes("<i>Acme</i>") && email.html.includes("&lt;i&gt;Acme&lt;/i&gt;"));
 	assert.match(buildInvitationEmail({ url: "u", workspaceName: "W", role: "editor" }).subject, /^Someone invited you to W/);

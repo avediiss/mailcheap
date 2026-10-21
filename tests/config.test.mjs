@@ -18,7 +18,7 @@ test("the server doesn't start with a short secret or password", () => {
 		Object.assign(process.env, STRONG);
 		assert.doesNotThrow(register);
 		process.env.ADMIN_PASSWORD = "short";
-		assert.throws(register, /Mailcheap can't start\. ADMIN_PASSWORD must be at least 12 characters/);
+		assert.throws(register, /Namag can't start\. ADMIN_PASSWORD must be at least 12 characters/);
 		Object.assign(process.env, STRONG, { SESSION_SECRET: "short" });
 		assert.throws(register, /SESSION_SECRET must be at least 32 characters/);
 	} finally {

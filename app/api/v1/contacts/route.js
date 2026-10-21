@@ -3,6 +3,7 @@ import { sendAlert } from "@/lib/alerts";
 import { authenticateRequest } from "@/lib/api-keys";
 import { isSendingEnabled } from "@/lib/config";
 import { upsertContact } from "@/lib/contacts";
+import { QuotaError } from "@/lib/quota";
 import { normalizeTags } from "@/lib/csv-import";
 import { connectDb } from "@/lib/db";
 import { getInbox } from "@/lib/inbox-links";
@@ -81,14 +82,21 @@ export async function POST(request) {
 	const newsletter = await Newsletter.findOne({ slug: input.slug, workspaceId: apiKey.workspaceId }).lean();
 	if (!newsletter) return fail(404, "Newsletter not found");
 
-	const { contact, created } = await upsertContact({
-		newsletter,
-		email: input.email,
-		source: input.source,
-		resubscribe: input.resubscribe,
-		firstName: input.firstName,
-		tags: input.tags,
-	});
+	let outcome;
+	try {
+		outcome = await upsertContact({
+			newsletter,
+			email: input.email,
+			source: input.source,
+			resubscribe: input.resubscribe,
+			firstName: input.firstName,
+			tags: input.tags,
+		});
+	} catch (error) {
+		if (error instanceof QuotaError) return fail(403, error.message);
+		throw error;
+	}
+	const { contact, created } = outcome;
 	if (created) after(() => notifyNewSubscriber({ newsletter, contact }));
 	// A pending contact who signs up again gets the confirmation again (throttled per address).
 	const isPending = contact.status === "pending";

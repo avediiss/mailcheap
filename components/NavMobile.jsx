@@ -3,19 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
-import LogoMailcheap from "@/components/LogoMailcheap";
+import LogoApp from "@/components/LogoApp";
+import { APP_NAME } from "@/lib/config";
 import NavLinks from "@/components/NavLinks";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-export default function NavMobile({ footer, switcher, role }) {
+export default function NavMobile({ footer, switcher, role, isPlatformAdmin }) {
 	const [isOpen, setIsOpen] = useState(false);
 
 	return (
 		<header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 pr-2 pl-4 backdrop-blur-md md:hidden">
 			<Link href="/" className="flex items-center gap-2">
-				<LogoMailcheap />
-				<span className="text-sm font-semibold tracking-tight">Mailcheap</span>
+				<LogoApp />
+				<span className="text-sm font-semibold tracking-tight">{APP_NAME}</span>
 			</Link>
 			<Sheet open={isOpen} onOpenChange={setIsOpen}>
 				<SheetTrigger asChild>
@@ -26,7 +27,7 @@ export default function NavMobile({ footer, switcher, role }) {
 				<SheetContent side="left" className="w-64 gap-0 p-3 pt-14">
 					<SheetTitle className="sr-only">Menu</SheetTitle>
 					{switcher && <div className="mb-3">{switcher}</div>}
-					<NavLinks onNavigate={() => setIsOpen(false)} role={role} />
+					<NavLinks onNavigate={() => setIsOpen(false)} role={role} isPlatformAdmin={isPlatformAdmin} />
 					<div className="mt-auto">{footer}</div>
 				</SheetContent>
 			</Sheet>
