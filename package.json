@@ -14,7 +14,8 @@
     "lint": "eslint",
     "test": "node --test \"tests/*.test.mjs\"",
     "test:db": "node --conditions=react-server --import ./tests/db/register.mjs --test \"tests/db/*.test.mjs\"",
-    "dev:demo": "node scripts/dev-demo.mjs"
+    "dev:demo": "node scripts/dev-demo.mjs",
+    "predeploy": "bash scripts/predeploy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1150.0",
