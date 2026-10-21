@@ -1,10 +1,11 @@
 import Link from "next/link";
 import BannerSuspended from "@/components/BannerSuspended";
-import LogoMailcheap from "@/components/LogoMailcheap";
+import LogoApp from "@/components/LogoApp";
 import NavFooter from "@/components/NavFooter";
 import NavLinks from "@/components/NavLinks";
 import NavMobile from "@/components/NavMobile";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
+import { APP_NAME } from "@/lib/config";
 import { requireWorkspace } from "@/lib/workspace";
 
 export default async function AppLayout({ children }) {
@@ -16,8 +17,8 @@ export default async function AppLayout({ children }) {
 		<div className="flex min-h-dvh flex-col md:flex-row">
 			<aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border/60 px-3 py-4 md:flex">
 				<Link href="/" className="mb-4 flex h-9 items-center gap-2 px-2.5">
-					<LogoMailcheap />
-					<span className="text-sm font-semibold tracking-tight">Mailcheap</span>
+					<LogoApp />
+					<span className="text-sm font-semibold tracking-tight">{APP_NAME}</span>
 				</Link>
 				<div className="mb-4">{switcher}</div>
 				<NavLinks role={role} />

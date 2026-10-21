@@ -210,6 +210,6 @@ test("when the invitation email can't be sent, the owner still gets the link and
 		assert.match(result.link, /\/invite\//);
 		assert.equal((await actions.resendInvitation(result.invitationId)).emailed, false);
 	} finally {
-		process.env.ALERT_FROM = "Mailcheap <alerts@platform.test>";
+		process.env.ALERT_FROM = "Namag <alerts@platform.test>";
 	}
 });

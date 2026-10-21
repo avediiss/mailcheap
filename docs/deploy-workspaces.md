@@ -24,7 +24,7 @@ AWS console → IAM → Policies → `mailcheap-ses` → Edit → add this block
 
 ## 2. PLATFORM_FROM (done)
 
-`PLATFORM_FROM` = `Mailcheap <alerts@abakelianavedis.com>` is set in Hostinger. It's the sender of password-reset
+`PLATFORM_FROM` = `Namag <alerts@abakelianavedis.com>` is set in Hostinger. It's the sender of password-reset
 and invitation emails.
 
 ## 3. Back up the database

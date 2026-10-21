@@ -1,6 +1,6 @@
 # Workspaces
 
-One Mailcheap install serves many **workspaces**: each client, or each of the owner's own brands, with its
+One Namag install serves many **workspaces**: each client, or each of the owner's own brands, with its
 own newsletters, contacts, campaigns, stats, API keys, sending domains and logins. A person in one workspace
 can't see or change another's.
 

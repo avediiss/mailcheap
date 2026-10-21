@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
-import LogoMailcheap from "@/components/LogoMailcheap";
+import LogoApp from "@/components/LogoApp";
+import { APP_NAME } from "@/lib/config";
 import NavLinks from "@/components/NavLinks";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -14,8 +15,8 @@ export default function NavMobile({ footer, switcher, role }) {
 	return (
 		<header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 pr-2 pl-4 backdrop-blur-md md:hidden">
 			<Link href="/" className="flex items-center gap-2">
-				<LogoMailcheap />
-				<span className="text-sm font-semibold tracking-tight">Mailcheap</span>
+				<LogoApp />
+				<span className="text-sm font-semibold tracking-tight">{APP_NAME}</span>
 			</Link>
 			<Sheet open={isOpen} onOpenChange={setIsOpen}>
 				<SheetTrigger asChild>

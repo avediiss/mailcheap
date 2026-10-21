@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { logout } from "@/app/(app)/actions";
 import { FormAcceptInvite, FormJoinWorkspace } from "@/components/FormAcceptInvite";
-import LogoMailcheap from "@/components/LogoMailcheap";
+import LogoApp from "@/components/LogoApp";
 import { Button } from "@/components/ui/button";
 import { getSession } from "@/lib/auth";
 import { findInvitationByToken } from "@/lib/members";
@@ -23,7 +23,7 @@ export default async function InvitePage({ params }) {
 		<main className="flex min-h-dvh items-center justify-center px-4">
 			<div className="w-full max-w-sm">
 				<div className="mb-8 flex flex-col items-center gap-3 text-center">
-					<LogoMailcheap className="size-10" />
+					<LogoApp className="size-10" />
 					<Heading invitation={invitation} />
 				</div>
 				<Body invitation={invitation} session={session} token={token} />
