@@ -47,7 +47,7 @@ async function tenant({ name, slug, status = "active", domain, owner, editor, ne
 	const names = ["Ava", "Noah", "Mia", "Leo", "Zoe", "Eli", "Ivy", "Max", "Lea", "Sam", "Nina", "Hugo", "Cleo", "Paul", "Rose", "Theo"];
 	const docs = Array.from({ length: contacts }, (_, index) => ({
 		workspaceId: workspace._id, newsletterId: newsletter._id, email: `${names[index % names.length].toLowerCase()}${index}@example.com`,
-		firstName: index % 3 === 0 ? undefined : names[index % names.length], status: index % 11 === 0 ? "unsubscribed" : "active",
+		firstName: index % 3 === 0 ? undefined : names[index % names.length], status: index % 11 === 0 ? "unsubscribed" : "active", unsubscribedAt: index % 11 === 0 ? new Date(Date.now() - index * DAY / 3) : undefined,
 		source: index % 4 === 0 ? "import" : "website", subscribedAt: new Date(Date.now() - index * 2 * DAY), createdAt: new Date(Date.now() - index * 2 * DAY),
 		lastOpenAt: index % 2 ? new Date(Date.now() - index * DAY) : undefined, tags: index % 5 === 0 ? ["vip"] : [],
 	}));
@@ -74,16 +74,52 @@ await tenant({ name: "Birch & Co", slug: "birch", status: "suspended", domain: "
 const birchWorkspace = await Workspace.findOne({ slug: "birch" });
 await Workspace.updateOne({ _id: acme.workspace._id }, { $set: { limits: { contacts: 40, emailsPerMonth: 100, newsletters: 3 } } });
 await Workspace.updateOne({ _id: birchWorkspace._id }, { $set: { limits: { contacts: 20, emailsPerMonth: 500, newsletters: 1 } } });
-const sends = (tenant, count, bounced) =>
-	Array.from({ length: count }, (_, index) => ({
-		kind: "welcome", workspaceId: tenant._id, newsletterId: null, email: `s${index}@example.com`, status: "sent",
-		sentAt: new Date(Date.now() - (index % 20) * DAY), ...(index < bounced && { bouncedAt: new Date() }),
-	}));
+// Ninety days of sending per workspace, so the console's charts have a shape: a weekday rhythm, a growing
+// workspace, one with a bounce problem that gets worse, and one that stopped sending a month and a half ago.
+// SES doesn't report deliveries, so none are recorded (the console says so).
 const newsletterOf = async (tenant) => (await Newsletter.findOne({ workspaceId: tenant._id }))._id;
-for (const [tenant, count, bounced] of [[acme.workspace, 82, 1], [birchWorkspace, 70, 7], [avedis.workspace, 39, 1]]) {
+let seed = 7;
+const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const profiles = [
+	{ tenant: acme.workspace, base: 4, growth: 0.04, bounce: 0.01, open: 0.52, click: 0.1 },
+	{ tenant: avedis.workspace, base: 2, growth: 0.01, bounce: 0.005, open: 0.61, click: 0.14 },
+	{ tenant: birchWorkspace, base: 5, growth: 0, bounce: 0.04, open: 0.35, click: 0.05, worsening: true },
+];
+for (const { tenant, base, growth, bounce, open, click, worsening } of profiles) {
 	const newsletterId = await newsletterOf(tenant);
-	await Message.insertMany(sends(tenant, count, bounced).map((message) => ({ ...message, newsletterId })));
+	const docs = [];
+	for (let daysAgo = 89; daysAgo >= 0; daysAgo--) {
+		const day = new Date(Date.now() - daysAgo * DAY);
+		const weekday = day.getUTCDay();
+		const rhythm = weekday === 2 || weekday === 4 ? 1.8 : weekday === 0 || weekday === 6 ? 0.3 : 1;
+		const count = Math.round(base * rhythm * (1 + growth * (89 - daysAgo)) * (0.7 + random() * 0.6));
+		const bounceRate = worsening ? bounce * (0.3 + (89 - daysAgo) / 89 * 1.4) : bounce;
+		for (let index = 0; index < count; index++) {
+			const sentAt = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 7 + Math.floor(random() * 12), Math.floor(random() * 60)));
+			if (sentAt > new Date()) continue;
+			docs.push({
+				kind: "welcome", workspaceId: tenant._id, newsletterId, email: `s${daysAgo}-${index}@example.com`, status: "sent", sentAt,
+				...(random() < bounceRate && { bouncedAt: sentAt }),
+				...(random() < bounceRate / 12 && { complainedAt: sentAt }),
+				...(random() < open && { openedAt: sentAt }),
+				...(random() < click && { clickedAt: sentAt }),
+			});
+		}
+	}
+	await Message.insertMany(docs);
 }
+// Dune Studio stopped sending 45 days ago. Acme's monthly limit sits just above its pace, so it reads as "close".
+const dune = await tenant({ name: "Dune Studio", slug: "dune", domain: "dune.test", owner: await user("owner@dune.test", "Dune Owner"), newsletterName: "Dune Dispatch", contacts: 6 });
+await Message.deleteMany({ workspaceId: dune.workspace._id });
+await Message.insertMany(Array.from({ length: 30 }, (_, index) => ({ kind: "welcome", workspaceId: dune.workspace._id, newsletterId: dune.newsletter._id, email: `d${index}@example.com`, status: "sent", sentAt: new Date(Date.now() - (45 + (index % 12)) * DAY) })));
+const startOfMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+const acmeThisMonth = await Message.countDocuments({ workspaceId: acme.workspace._id, sentAt: { $gte: startOfMonth } });
+await Workspace.updateOne({ _id: acme.workspace._id }, { $set: { limits: { contacts: 40, emailsPerMonth: Math.max(Math.round(acmeThisMonth / 0.85), 20), newsletters: 3 } } });
+// Things that aren't going out as they should.
+await Campaign.create({ workspaceId: acme.workspace._id, newsletterId: acme.newsletter._id, subject: "Autumn launch", status: "sending", format: "markdown", markdown: "Big news.", startedAt: new Date(Date.now() - 4 * 3600_000) });
+await Campaign.collection.updateOne({ subject: "Autumn launch" }, { $set: { updatedAt: new Date(Date.now() - 3 * 3600_000) } });
+await Campaign.create({ workspaceId: birchWorkspace._id, newsletterId: await newsletterOf(birchWorkspace), subject: "Fall sale", status: "paused", format: "markdown", markdown: "Sale." });
+await Message.insertMany(Array.from({ length: 5 }, (_, index) => ({ kind: "welcome", workspaceId: birchWorkspace._id, newsletterId: dune.newsletter._id, email: `f${index}@example.com`, status: "failed", error: "Mailbox does not exist", sentAt: undefined })));
 for (const [workspaceId, action, actor] of [
 	[acme.workspace._id, "workspace.created", root], [acme.workspace._id, "workspace.limits", root],
 	[birchWorkspace._id, "workspace.created", root], [birchWorkspace._id, "workspace.suspended", root],
@@ -92,6 +128,7 @@ for (const [workspaceId, action, actor] of [
 }
 await Domain.create({ workspaceId: acme.workspace._id, domain: "studio-mail.test" });
 await Domain.create({ workspaceId: acme.workspace._id, domain: "not-yet-added.test" });
+await Domain.collection.updateOne({ domain: "not-yet-added.test" }, { $set: { createdAt: new Date(Date.now() - 6 * DAY) } });
 
 for (const [email, role, expiresIn] of [["priya@acme-studio.test", "editor", 5 * DAY], ["old-invite@acme-studio.test", "owner", -2 * DAY]]) {
 	const { tokenHash } = createInviteToken();

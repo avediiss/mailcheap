@@ -9,7 +9,7 @@ import { formatDateKey } from "@/lib/time-zone";
 const BOX = { width: 600, height: 200 };
 
 // Subscribers at the end of each day of the period, over the period before as a dashed line.
-export default function ChartSubscribers({ current, previous }) {
+export default function ChartSubscribers({ current, previous = [], labelEvery = 7 }) {
 	const values = current.map(({ total }) => total);
 	const previousValues = previous.map(({ total }) => total);
 	const scale = niceScale([...values, ...previousValues]);
@@ -34,9 +34,9 @@ export default function ChartSubscribers({ current, previous }) {
 		};
 	});
 
-	// A label every 7 days, ending today; every other one on small screens.
+	// A label every `labelEvery` days, ending today; every other one on small screens.
 	const xLabels = [];
-	for (let index = current.length - 1, position = 0; index >= 0; index -= 7, position += 1) {
+	for (let index = current.length - 1, position = 0; index >= 0; index -= labelEvery, position += 1) {
 		xLabels.push({
 			x: xOf(index),
 			label: formatDateKey(current[index].key),

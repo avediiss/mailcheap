@@ -7,6 +7,7 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
 import { addWorkspaceDomain } from "@/lib/domains";
 import { inviteMember } from "@/lib/members";
+import { sendAccountReset, setAccountDisabled, signOutAccount } from "@/lib/platform-accounts";
 import { invitePlatformAdmin, removePlatformAdmin, revokePlatformInvitation } from "@/lib/platform-team";
 import { readLimits, slugifyWorkspaceName } from "@/lib/platform-rules";
 import { normalizeEmail } from "@/lib/validation";
@@ -134,4 +135,26 @@ export async function removePlatformTeamMember(userId) {
 	const result = await removePlatformAdmin({ actor: session, userId });
 	revalidatePath("/", "layout");
 	return result;
+}
+
+// --- Accounts: every login on the platform ---
+
+async function runAccountAction(userId, run) {
+	const session = await requirePlatformAdmin();
+	if (!isValidObjectId(userId)) return { error: "Account not found" };
+	const result = await run(session);
+	revalidatePath("/platform/accounts");
+	return result;
+}
+
+export async function setAccountDisabledAction(userId, disabled) {
+	return runAccountAction(userId, (actor) => setAccountDisabled({ actor, userId, disabled: Boolean(disabled) }));
+}
+
+export async function signOutAccountAction(userId) {
+	return runAccountAction(userId, (actor) => signOutAccount({ actor, userId }));
+}
+
+export async function sendAccountResetAction(userId) {
+	return runAccountAction(userId, (actor) => sendAccountReset({ actor, userId }));
 }

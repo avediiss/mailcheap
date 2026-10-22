@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Globe, KeyRound, LayoutGrid, Newspaper, Send, ShieldCheck, UserCog, Users } from "lucide-react";
+import { Activity, Building2, Globe, KeyRound, LayoutGrid, Newspaper, Send, ShieldCheck, UserCog, Users } from "lucide-react";
 import { hasRole } from "@/lib/workspace-rules";
 import { cn } from "@/lib/utils";
 
@@ -61,5 +61,8 @@ const NAV_ITEMS = [
 const PLATFORM_ITEMS = [
 	{ href: "/platform", label: "Overview", icon: ShieldCheck, exact: true },
 	{ href: "/platform/workspaces", label: "Workspaces", icon: Building2 },
+	{ href: "/platform/accounts", label: "Accounts", icon: Users },
+	{ href: "/platform/domains", label: "Domains", icon: Globe },
+	{ href: "/platform/activity", label: "Activity", icon: Activity },
 	{ href: "/platform/team", label: "Team", icon: UserCog },
 ];

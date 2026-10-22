@@ -1,8 +1,12 @@
+import { SERIES_BG } from "@/lib/chart-colors";
 import { cn } from "@/lib/utils";
 
 // The mark of a series, for legends and tooltips.
 export default function SwatchChart({ kind }) {
-	return <span aria-hidden="true" className={cn("inline-block shrink-0", SWATCHES[kind])} />;
+	// "series-2": the third colour of a chart that stacks several.
+	const series = /^series-(\d+)$/.exec(kind);
+	const className = series ? cn("size-2 rounded-[2px]", SERIES_BG[Number(series[1])]) : SWATCHES[kind];
+	return <span aria-hidden="true" className={cn("inline-block shrink-0", className)} />;
 }
 
 const SWATCHES = {

@@ -95,6 +95,40 @@ nothing else.
 - **New workspace**: a name, the first owner's email and optional limits. The owner gets an invitation by email, or a
   link to hand over when email isn't set up.
 
+### What the overview shows
+
+`/platform` has a **7 / 30 / 90 day** switch (in the address as `?range=`). Days are UTC dates, since it looks at
+every client at once. Everything comes from data the platform already keeps; nothing extra is stored.
+
+- **Cards**: workspaces, subscribers (with the net change in the period), emails sent, bounce rate (always the last
+  30 days, because the pause limit is judged on that), open rate and click rate, and the estimated SES cost of the
+  month. Open and click rates are estimates: some mail apps open emails on their own or hide opens.
+- **Emails sent per day**, stacked by workspace (the biggest five, the rest as "Others"). Test emails never count.
+- **Bounce rate and complaint rate**: a 7-day rolling rate with the pause limit drawn across it
+  (`LIMITS.bounceRate`, `LIMITS.complaintRate`). A day with too few sends in its window draws nothing.
+- **Subscribers** over the period: who joined and who left (an unsubscribe; a bounce counts only when it also
+  unsubscribed the contact).
+- **Needs attention** also flags a workspace that is **on pace to pass its monthly email limit**: this month's
+  sends scaled to the whole month, shown only after three days of the month and some sending.
+- **Sending problems**: sends that are paused, sends that have not moved for an hour, and emails that failed in the
+  last 7 days, by workspace.
+- **Top by volume**, **Fastest growing** and **Gone quiet** (no send for 30 days, or none since the first week).
+
+The **Workspaces** list adds a 30-day trend line, the SES cost this month and the pace warning; a workspace's own
+page has its daily chart, open/click rates and cost.
+
+"Delivered" is not shown as a rate until Amazon SES reports delivery events: add the **Delivery** event type to the
+`mailcheap` configuration set's event destination. Until then the overview says "Delivery not reported yet".
+
+### Accounts, Domains and Activity
+
+- **Accounts** (`/platform/accounts`): every login, the workspaces it belongs to and when it was last seen; search by
+  email or name. Per account: send a password reset, sign out everywhere, disable or enable. A disabled account
+  is signed out at once. You can't disable yourself or the only administrator who can still log in.
+- **Domains** (`/platform/domains`): every client's sending domains with their state in SES, worst first (a domain still
+  unverified after 3 days is flagged), and SES identities that belong to no workspace.
+- **Activity** (`/platform/activity`): the full log, filtered by workspace and action, 50 at a time.
+
 ### Limits (all optional; empty means none)
 
 | Limit | What it counts | What happens at the limit |
