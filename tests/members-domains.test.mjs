@@ -140,3 +140,10 @@ test("archive domains must be real hostnames that aren't the dashboard", () => {
 	assert.match(getArchiveHostProblem("App.Example.com", "app.example.com"), /dashboard's own address/);
 	assert.match(getArchiveHostProblem("bad_host.example.org", "app.example.com"), /domain name like/);
 });
+
+test("the administrator invitation names the platform, not a workspace or a role", () => {
+	const email = buildInvitationEmail({ url: "https://app.test/invite/abc", workspaceName: "", inviterName: "Avedis", platform: true });
+	assert.match(email.subject, /Avedis invited you to run Namag/);
+	assert.ok(email.text.includes("https://app.test/invite/abc"));
+	assert.doesNotMatch(email.text, /editor|owner/i);
+});

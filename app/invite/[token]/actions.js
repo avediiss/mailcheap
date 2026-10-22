@@ -35,7 +35,7 @@ export async function acceptInvitation(_state, formData) {
 	});
 	if (result.error) return result;
 	await startSession(result.user);
-	await rememberWorkspace(result.workspaceId);
+	if (result.workspaceId) await rememberWorkspace(result.workspaceId);
 	redirect("/");
 }
 
@@ -45,6 +45,6 @@ export async function joinWorkspace(_state, formData) {
 	if (!session) return { error: "Log in first" };
 	const result = await acceptInvitationExistingUser({ token: String(formData.get("token") ?? ""), session });
 	if (result.error) return result;
-	await rememberWorkspace(result.workspaceId);
+	if (result.workspaceId) await rememberWorkspace(result.workspaceId);
 	redirect("/");
 }

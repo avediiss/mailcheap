@@ -27,7 +27,6 @@ export async function addDomain(_state, formData) {
 		workspaceId: context.workspaceId,
 		userId: context.session.userId,
 		input: String(formData.get("domain") ?? ""),
-		isPlatformAdmin: context.session.isPlatformAdmin,
 	});
 	if (result.ok) {
 		await notifyActivity([`Domain added: ${result.domain} (${context.workspace.name})`]);

@@ -6,9 +6,13 @@ can't see or change another's.
 
 ## Who can do what
 
-- **Platform owner** (`User.isPlatformAdmin`): uses every workspace with the owner's rights. The first one
-  is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` at their first login (or by the migration). After that the
-  database decides: changing `ADMIN_PASSWORD` in the environment changes nothing.
+- **Platform administrator** (`User.isPlatformAdmin`): controls and checks the platform from the console
+  (`/platform`): clients, limits, suspensions, domains, the team. They have **no access inside a workspace**: no
+  contacts, campaigns or newsletters, and no way to switch into one. They see inside only if a client invites them
+  as a member, like anyone else. The first one is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` at their first login
+  (or by the migration). After that the database decides: changing `ADMIN_PASSWORD` in the environment changes nothing.
+  An account can be an administrator and a member at once (the original install is), but the cleanest setup is a
+  separate administrator-only login, which lands in the console and has no workspace menu.
 - **Workspace owner**: members, domains, API keys, and everything an editor can do.
 - **Workspace editor**: newsletters, campaigns, contacts.
 
@@ -73,7 +77,8 @@ sending is off. The log-in details are printed when it starts.
 
 ## The platform console (Phase 4)
 
-Only the platform owner sees the **Platform** section of the menu.
+Only platform administrators see the **Platform** section of the menu; an administrator with no workspace sees
+nothing else.
 
 - **Overview** (`/platform`): workspaces, contacts, emails this month and the 30-day bounce rate across everyone, the
   shared SES account's quota and health, a **Needs attention** list that says why (past the pause limit, suspended,
@@ -81,8 +86,12 @@ Only the platform owner sees the **Platform** section of the menu.
 - **Workspaces** (`/platform/workspaces`): every client with their usage against limits and deliverability. On a
   phone each is a card.
 - **A workspace** (`/platform/workspaces/<id>`): usage, deliverability, name and limits (editable), people and
-  pending invitations, newsletters, domains and an activity log. **Open workspace** steps into it as an owner;
-  **Suspend/Resume** stops or restores sending, public signups and the API.
+  pending invitations, newsletters, domains and an activity log. **Suspend/Resume** stops or restores sending,
+  public signups and the API, and **Assign domain** attaches a domain (including one created in SES by hand) to the
+  workspace. There is no "open workspace": the console is configuration only.
+- **Team** (`/platform/team`): the administrators. Invite someone by email (they get an administrator-only account,
+  or the right added to their existing one), revoke pending invitations, remove an administrator. The last one can't
+  be removed. Platform alerts go to every administrator (`ADMIN_EMAIL` is only the fallback when there is none).
 - **New workspace**: a name, the first owner's email and optional limits. The owner gets an invitation by email, or a
   link to hand over when email isn't set up.
 
@@ -96,5 +105,4 @@ Only the platform owner sees the **Platform** section of the menu.
 
 Workspace people see their own usage ("Your plan" on the overview) but never what an email costs you.
 
-Everything the platform owner does to a workspace, and every time they step into one they aren't a member of, is
-kept in an activity log (`AuditLog`).
+Everything an administrator does to a workspace or to the team is kept in an activity log (`AuditLog`).

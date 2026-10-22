@@ -47,7 +47,9 @@ test("only the platform owner can use the console actions: everyone else is sent
 			() => actions.createWorkspace(null, form({ name: "Sneaky", ownerEmail: "x@example.com" })),
 			() => actions.updateWorkspace(null, form({ id: id(b.workspace), name: "Hacked" })),
 			() => actions.setWorkspaceStatus(id(b.workspace), "suspended"),
-			() => actions.openWorkspace(id(b.workspace)),
+			() => actions.assignDomain(null, form({ id: id(b.workspace), domain: "sneaky.io" })),
+			() => actions.invitePlatformTeamMember(null, form({ email: "friend@example.com" })),
+			() => actions.removePlatformTeamMember(id(root)),
 		]) {
 			assert.equal((await catching(run)).redirectTo, "/");
 		}
@@ -138,21 +140,29 @@ test("suspending stops a workspace's API and signups, resuming brings them back,
 	assert.equal((await setWorkspaceStatus(id(a.workspace), "deleted")).error, "Workspace not found");
 });
 
-test("stepping into a workspace is recorded for the platform owner, but not for their own", async () => {
-	const { openWorkspace } = await import("@/app/(app)/platform/actions");
+test("the platform owner has no way into a workspace: no switching, no data, only the console", async () => {
 	const { switchWorkspace } = await import("@/app/(app)/workspaces/actions");
-	const { WORKSPACE_COOKIE } = await import("@/lib/workspace");
-	await db.models.Membership.create({ userId: root._id, workspaceId: b.workspace._id, role: "owner" });
+	const contacts = await import("@/app/(app)/contacts/actions");
+	const campaigns = await import("@/app/(app)/campaigns/actions");
+	const actions = await import("@/app/(app)/platform/actions");
+	assert.equal(actions.openWorkspace, undefined, "the 'open workspace' action is gone");
 
 	await loginAs(root);
-	assert.equal((await catching(() => openWorkspace(id(a.workspace)))).redirectTo, "/");
-	assert.equal(globalThis.__testRequest.cookies.get(WORKSPACE_COOKIE), id(a.workspace));
-	assert.equal(await db.models.AuditLog.countDocuments({ workspaceId: a.workspace._id, action: "workspace.opened" }), 1);
+	assert.equal((await switchWorkspace(id(a.workspace))).error, "Workspace not found");
+	for (const run of [
+		() => contacts.addContact({ newsletterId: id(a.newsletter), email: "inside@example.com" }),
+		() => contacts.deleteContact(id(a.contact)),
+		() => campaigns.discardCampaign(id(a.campaign)),
+	]) {
+		assert.equal((await catching(run)).redirectTo, "/platform", "sent back to the console, nothing done");
+	}
+	assert.ok(await db.models.Contact.exists({ _id: a.contact._id }));
+	assert.equal(await db.models.Contact.countDocuments({ email: "inside@example.com" }), 0);
+	assert.equal(await db.models.AuditLog.countDocuments({ action: "workspace.opened" }), 0);
 
-	await switchWorkspace(id(b.workspace));
-	assert.equal(await db.models.AuditLog.countDocuments({ workspaceId: b.workspace._id }), 0, "a member isn't 'acting as'");
-	await switchWorkspace(id(a.workspace));
-	assert.equal(await db.models.AuditLog.countDocuments({ workspaceId: a.workspace._id, action: "workspace.opened" }), 2);
+	// Configuration stays possible from the console: it records what was done, without opening anything.
+	assert.equal((await actions.setWorkspaceStatus(id(a.workspace), "suspended")).ok, true);
+	assert.equal(await db.models.AuditLog.countDocuments({ workspaceId: a.workspace._id, action: "workspace.suspended" }), 1);
 });
 
 test("the console's numbers: contacts that count, emails this month without test mail, and health once there is enough sending", async () => {

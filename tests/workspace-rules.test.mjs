@@ -104,3 +104,11 @@ test("alerts go to the platform owner, the workspace's owners, or both, without 
 	assert.deepEqual(resolveAlertRecipients({ audience: "owners", ownerEmails: [], platformEmail }), [], "a workspace with no owners tells nobody");
 	assert.deepEqual(resolveAlertRecipients({ audience: "platform", ownerEmails, platformEmail: undefined }), []);
 });
+
+test("platform alerts reach every administrator, once each, alongside the owners when asked", () => {
+	const platformEmails = ["Root@platform.test", "second@platform.test"];
+	assert.deepEqual(resolveAlertRecipients({ platformEmails }), ["root@platform.test", "second@platform.test"]);
+	assert.deepEqual(resolveAlertRecipients({ platformEmails, platformEmail: "root@platform.test" }), ["root@platform.test", "second@platform.test"], "the legacy address isn't doubled");
+	assert.deepEqual(resolveAlertRecipients({ audience: "owners+platform", ownerEmails: ["owner@acme.test"], platformEmails }), ["owner@acme.test", "root@platform.test", "second@platform.test"]);
+	assert.deepEqual(resolveAlertRecipients({ audience: "owners", ownerEmails: ["owner@acme.test"], platformEmails }), ["owner@acme.test"], "owners-only never reaches the platform");
+});

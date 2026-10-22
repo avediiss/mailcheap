@@ -60,12 +60,13 @@ async function tenant({ name, slug, status = "active", domain, owner, editor, ne
 	return { workspace, newsletter };
 }
 
-const root = await user("root@demo.test", "Avedis (platform owner)", { isPlatformAdmin: true });
+const root = await user("root@demo.test", "Platform administrator", { isPlatformAdmin: true });
+const avedisOwner = await user("avedis@demo.test", "Avedis (newsletter owner)");
 const dana = await user("dana@acme-studio.test", "Dana Whitfield");
 const marcus = await user("marcus@acme-studio.test", "Marcus Lee");
 const birch = await user("owner@birch.test", "Birch Owner");
 
-const avedis = await tenant({ name: "Avedis", slug: "avedis", domain: "abakelianavedis.com", owner: root, newsletterName: "Avedis Notes", contacts: 12 });
+const avedis = await tenant({ name: "Avedis", slug: "avedis", domain: "abakelianavedis.com", owner: avedisOwner, newsletterName: "Avedis Notes", contacts: 12 });
 const acme = await tenant({ name: "Acme Studio", slug: "acme", domain: "acme-studio.test", owner: dana, editor: marcus, newsletterName: "Acme Notes", contacts: 34 });
 await tenant({ name: "Birch & Co", slug: "birch", status: "suspended", domain: "birch.test", owner: birch, newsletterName: "Birch Weekly", contacts: 8 });
 // Limits and sending history, so the platform console has something to show: Acme is close to its limits,
@@ -91,7 +92,6 @@ for (const [workspaceId, action, actor] of [
 }
 await Domain.create({ workspaceId: acme.workspace._id, domain: "studio-mail.test" });
 await Domain.create({ workspaceId: acme.workspace._id, domain: "not-yet-added.test" });
-await Membership.create({ userId: root._id, workspaceId: acme.workspace._id, role: "owner" }).catch(() => {});
 
 for (const [email, role, expiresIn] of [["priya@acme-studio.test", "editor", 5 * DAY], ["old-invite@acme-studio.test", "owner", -2 * DAY]]) {
 	const { tokenHash } = createInviteToken();
@@ -117,7 +117,8 @@ console.log(`
   Namag demo
   --------------
   Open:      http://localhost:${PORT}
-  Platform owner:   root@demo.test
+  Platform admin:   root@demo.test (console only, no workspace)
+  Avedis owner:     avedis@demo.test
   Acme owner:       dana@acme-studio.test
   Acme editor:      marcus@acme-studio.test
   Suspended owner:  owner@birch.test

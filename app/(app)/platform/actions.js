@@ -1,15 +1,14 @@
 "use server";
 
 import { isValidObjectId } from "mongoose";
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { recordAudit } from "@/lib/audit";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
+import { addWorkspaceDomain } from "@/lib/domains";
 import { inviteMember } from "@/lib/members";
+import { invitePlatformAdmin, removePlatformAdmin, revokePlatformInvitation } from "@/lib/platform-team";
 import { readLimits, slugifyWorkspaceName } from "@/lib/platform-rules";
-import { WORKSPACE_COOKIE } from "@/lib/workspace";
 import { normalizeEmail } from "@/lib/validation";
 import Workspace from "@/models/Workspace";
 
@@ -94,17 +93,45 @@ export async function setWorkspaceStatus(id, status) {
 	return { ok: true };
 }
 
-// Steps into a workspace to look at what its people see. Recorded, because it is the platform owner acting
-// inside someone else's space.
-export async function openWorkspace(id) {
+// Gives a workspace a sending domain, including one that already exists in the sending service. This is
+// configuration, not the inside of the workspace: the platform owner can set a client up without being let in.
+export async function assignDomain(_state, formData) {
 	const session = await requirePlatformAdmin();
+	const id = readText(formData, "id");
 	if (!isValidObjectId(id)) return { error: "Workspace not found" };
 	await connectDb();
-	const workspace = await Workspace.findById(id).select({ name: 1 }).lean();
-	if (!workspace) return { error: "Workspace not found" };
+	if (!(await Workspace.exists({ _id: id }))) return { error: "Workspace not found" };
 
-	const store = await cookies();
-	store.set(WORKSPACE_COOKIE, String(id), { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
-	await recordAudit({ actor: session, workspaceId: id, action: "workspace.opened", detail: { name: workspace.name } });
-	redirect("/");
+	const result = await addWorkspaceDomain({ workspaceId: id, userId: session.userId, input: readText(formData, "domain"), isPlatformAdmin: true });
+	if (result.ok) {
+		await recordAudit({ actor: session, workspaceId: id, action: "workspace.domain", detail: { domain: result.domain } });
+		revalidatePath("/platform", "layout");
+	}
+	return result;
+}
+
+// --- The platform team: the accounts that run the platform ---
+
+export async function invitePlatformTeamMember(_state, formData) {
+	const session = await requirePlatformAdmin();
+	const result = await invitePlatformAdmin({ inviter: session, email: readText(formData, "email") });
+	if (result.ok) revalidatePath("/platform/team");
+	return result;
+}
+
+export async function revokePlatformTeamInvitation(invitationId) {
+	await requirePlatformAdmin();
+	if (!isValidObjectId(invitationId)) return { error: "Invitation not found" };
+	const result = await revokePlatformInvitation({ invitationId });
+	revalidatePath("/platform/team");
+	return result;
+}
+
+// Takes administrator rights from a person. Removing your own works too, as long as someone else remains.
+export async function removePlatformTeamMember(userId) {
+	const session = await requirePlatformAdmin();
+	if (!isValidObjectId(userId)) return { error: "This person is not a platform administrator" };
+	const result = await removePlatformAdmin({ actor: session, userId });
+	revalidatePath("/", "layout");
+	return result;
 }

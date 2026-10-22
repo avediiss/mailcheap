@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import AvatarInitials from "@/components/AvatarInitials";
 import BadgeHealth from "@/components/BadgeHealth";
 import BadgeStatus from "@/components/BadgeStatus";
-import ButtonOpenWorkspace from "@/components/ButtonOpenWorkspace";
 import ButtonWorkspaceStatus from "@/components/ButtonWorkspaceStatus";
+import FormAssignDomain from "@/components/FormAssignDomain";
 import FormWorkspaceSettings from "@/components/FormWorkspaceSettings";
 import HeaderPage from "@/components/HeaderPage";
 import ListAudit from "@/components/ListAudit";
@@ -39,7 +39,6 @@ export default async function WorkspaceDetailPage({ params }) {
 				icon={<AvatarInitials name={summary.name} size={32} shape="square" />}
 				meta={summary.status === "suspended" ? <BadgeStatus status="paused" label="Suspended" /> : <BadgeStatus status="active" label="Active" />}
 			>
-				<ButtonOpenWorkspace id={summary.id} label="Open workspace" />
 				<ButtonWorkspaceStatus id={summary.id} name={summary.name} status={summary.status} />
 			</HeaderPage>
 
@@ -103,6 +102,9 @@ export default async function WorkspaceDetailPage({ params }) {
 				</Section>
 
 				<Section title="Newsletters and domains" stagger={4}>
+					<p className="border-b border-border/60 bg-card px-4 py-3 text-xs text-pretty text-muted-foreground sm:px-5">
+						Configuration only. This account can control a workspace, but can’t see its contacts, campaigns or emails.
+					</p>
 					<div className="grid gap-px bg-border/60 sm:grid-cols-2">
 						<div className="flex flex-col gap-2 bg-card p-4 sm:p-5">
 							<span className="text-xs text-muted-foreground">Newsletters</span>
@@ -118,6 +120,7 @@ export default async function WorkspaceDetailPage({ params }) {
 							{domains.length === 0 ? <span className="text-sm text-muted-foreground">None yet</span> : domains.map((domain) => (
 								<span key={domain.id} className="font-mono text-sm">{domain.domain}</span>
 							))}
+							<FormAssignDomain id={summary.id} />
 						</div>
 					</div>
 				</Section>
