@@ -6,12 +6,16 @@ import { endSession, requireSession, startSession } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/passwords";
 import { getPasswordProblem } from "@/lib/passwords-rules";
+import { isAdminTwoFactorRequired } from "@/lib/config";
 import { isRateLimited } from "@/lib/rate-limit";
+import { beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, regenerateRecoveryCodes } from "@/lib/two-factor";
 import User from "@/models/User";
 
 const MAX_NAME_LENGTH = 120;
 // Guessing the current password from a stolen session is slowed down.
 const PASSWORD_TRIES = { name: "account-password", limit: 5, window: "15 m" };
+// Six-digit codes are guessable in time, so every try on the account page counts too.
+const CODE_TRIES = { name: "account-2fa", limit: 8, window: "15 m" };
 
 export async function updateProfile(_state, formData) {
 	const session = await requireSession();
@@ -54,4 +58,41 @@ export async function signOutEverywhere() {
 	await User.updateOne({ _id: session.userId }, { $inc: { sessionVersion: 1 } });
 	await endSession();
 	redirect("/login");
+}
+
+// --- Two-factor login ---
+
+export async function startTwoFactorSetup() {
+	const session = await requireSession();
+	const result = await beginTwoFactorSetup(session.userId);
+	return result.error ? { error: result.error } : { ok: true, secret: result.secret, qr: result.qr };
+}
+
+export async function finishTwoFactorSetup(_state, formData) {
+	const session = await requireSession();
+	if (await isRateLimited({ ...CODE_TRIES, key: session.userId })) return { error: "Too many attempts. Try again in 15 minutes." };
+	const result = await confirmTwoFactorSetup({ userId: session.userId, code: formData.get("code") });
+	if (result.error) return { error: result.error, expired: result.expired };
+	revalidatePath("/", "layout");
+	return { ok: true, recoveryCodes: result.recoveryCodes };
+}
+
+export async function newRecoveryCodes(_state, formData) {
+	const session = await requireSession();
+	if (await isRateLimited({ ...CODE_TRIES, key: session.userId })) return { error: "Too many attempts. Try again in 15 minutes." };
+	const result = await regenerateRecoveryCodes({ userId: session.userId, code: formData.get("code") });
+	if (result.error) return { error: result.error };
+	revalidatePath("/account");
+	return { ok: true, recoveryCodes: result.recoveryCodes };
+}
+
+export async function turnOffTwoFactor(_state, formData) {
+	const session = await requireSession();
+	// An administrator who could switch it off would make the requirement mean nothing.
+	if (session.isPlatformAdmin && isAdminTwoFactorRequired()) return { error: "Platform administrators must keep two-factor login on." };
+	if (await isRateLimited({ ...CODE_TRIES, key: session.userId })) return { error: "Too many attempts. Try again in 15 minutes." };
+	const result = await disableTwoFactor({ userId: session.userId, password: formData.get("password"), code: formData.get("code") });
+	if (result.error) return { error: result.error };
+	revalidatePath("/", "layout");
+	return { ok: true };
 }
