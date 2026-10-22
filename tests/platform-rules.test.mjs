@@ -7,6 +7,7 @@ import {
 	MIN_SENT_FOR_HEALTH,
 	formatLimit,
 	getContactRoom,
+	getAccountDisableProblem,
 	getAdminRemovalProblem,
 	getEmailQuotaProblem,
 	getHealth,
@@ -120,4 +121,13 @@ test("an administrator can be removed only while another one remains", () => {
 	assert.equal(getAdminRemovalProblem({ admins, targetUserId: "3" }), "This person is not a platform administrator");
 	assert.match(getAdminRemovalProblem({ admins: [admins[0]], targetUserId: "1" }), /at least one administrator/);
 	assert.equal(getAdminRemovalProblem({ admins: [], targetUserId: "1" }), "This person is not a platform administrator");
+});
+
+test("an account can be disabled by someone else, and never leaves the platform without an administrator who can log in", () => {
+	const admins = [{ userId: "1" }, { userId: "2" }];
+	assert.equal(getAccountDisableProblem({ actorId: "1", target: { userId: "3", isPlatformAdmin: false }, admins }), null);
+	assert.equal(getAccountDisableProblem({ actorId: "1", target: { userId: "2", isPlatformAdmin: true }, admins }), null);
+	assert.match(getAccountDisableProblem({ actorId: "1", target: { userId: "1", isPlatformAdmin: true }, admins }), /own account/);
+	assert.match(getAccountDisableProblem({ actorId: "9", target: { userId: "1", isPlatformAdmin: true }, admins: [admins[0]] }), /only platform administrator/);
+	assert.equal(getAccountDisableProblem({ actorId: "9", target: { userId: "3", isPlatformAdmin: false }, admins: [admins[0]] }), null, "a client can always be disabled");
 });

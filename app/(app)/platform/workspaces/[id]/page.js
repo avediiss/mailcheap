@@ -4,6 +4,7 @@ import AvatarInitials from "@/components/AvatarInitials";
 import BadgeHealth from "@/components/BadgeHealth";
 import BadgeStatus from "@/components/BadgeStatus";
 import ButtonWorkspaceStatus from "@/components/ButtonWorkspaceStatus";
+import ChartDaily from "@/components/ChartDaily";
 import FormAssignDomain from "@/components/FormAssignDomain";
 import FormWorkspaceSettings from "@/components/FormWorkspaceSettings";
 import HeaderPage from "@/components/HeaderPage";
@@ -15,6 +16,8 @@ import { formatDate, formatNumber, formatRelative } from "@/lib/format";
 import { roleLabel } from "@/lib/roles";
 import { listInvitations, listMembers } from "@/lib/members";
 import { getWorkspaceDetail } from "@/lib/platform";
+import { getPlatformInsights } from "@/lib/platform-insights";
+import { formatCost } from "@/lib/send-cost";
 
 export const metadata = { title: "Workspace" };
 
@@ -29,7 +32,13 @@ export default async function WorkspaceDetailPage({ params }) {
 	const detail = await getWorkspaceDetail(id);
 	if (!detail) notFound();
 	const { summary, domains, newsletters } = detail;
-	const [members, invitations, activity] = await Promise.all([listMembers(id), listInvitations(id), listAudit({ workspaceId: id, limit: 12 })]);
+	const [members, invitations, activity, insights] = await Promise.all([
+		listMembers(id),
+		listInvitations(id),
+		listAudit({ workspaceId: id, limit: 12 }),
+		getPlatformInsights({ range: 30, names: new Map([[id, summary.name]]), workspaceId: id }),
+	]);
+	const projection = summary.emailsProjection;
 
 	return (
 		<>
@@ -47,8 +56,36 @@ export default async function WorkspaceDetailPage({ params }) {
 					<div className="flex flex-col gap-4 p-4 sm:p-5">
 						<MeterUsage label="Contacts" meter={summary.contactsMeter} />
 						<MeterUsage label="Emails this month" meter={summary.emailsMeter} />
+						{projection.state === "over" && (
+							<p className="-mt-2 text-xs text-amber-600 dark:text-amber-400">
+								On pace for about {formatNumber(projection.projected)} emails by the end of the month, over its limit.
+							</p>
+						)}
+						{projection.state === "ok" && projection.isReliable && summary.limits.emailsPerMonth !== null && (
+							<p className="-mt-2 text-xs text-muted-foreground">On pace for about {formatNumber(projection.projected)} emails this month.</p>
+						)}
 						<MeterUsage label="Newsletters" meter={summary.newslettersMeter} />
 					</div>
+				</Section>
+
+				<Section title="Emails sent, last 30 days" stagger={1}>
+					<div className="p-4 sm:p-5">
+						<ChartDaily stack={insights.stack} className="h-40 sm:h-48" />
+					</div>
+					<dl className="grid grid-cols-2 gap-px border-t border-border/60 bg-border/60 sm:grid-cols-4">
+						{[
+							["Sent", formatNumber(insights.send.totals.sent)],
+							["Opens", formatPercent(insights.send.totals.opened, insights.send.totals.sent, 1)],
+							["Clicks", formatPercent(insights.send.totals.clicked, insights.send.totals.sent, 1)],
+							["SES cost this month", formatCost(summary.costThisMonth)],
+						].map(([label, value]) => (
+							<div key={label} className="flex flex-col gap-1 bg-card px-4 py-3">
+								<dt className="text-xs text-muted-foreground">{label}</dt>
+								<dd className="text-lg font-semibold tabular-nums">{value}</dd>
+							</div>
+						))}
+					</dl>
+					<p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground sm:px-5">Open and click rates are estimates: some mail apps open emails on their own or hide opens.</p>
 				</Section>
 
 				<Section title="Deliverability, last 30 days" stagger={1}>
