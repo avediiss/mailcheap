@@ -115,7 +115,7 @@ test("newsletter settings can't be changed across workspaces, and can't use anot
 	await loginAs(a.owner);
 	const form = (fields) => {
 		const data = new FormData();
-		for (const [key, value] of Object.entries({ name: "Edited", slug: "edited", fromEmail: `hi@${a.domain}`, ...fields })) data.set(key, value);
+		for (const [key, value] of Object.entries({ name: "Edited", slug: "edited", fromEmail: `hi@${a.domain}`, replyTo: `info@${a.domain}`, ...fields })) data.set(key, value);
 		return data;
 	};
 
@@ -138,7 +138,7 @@ test("a workspace with no domain can't pick a from address at all", async () => 
 	await db.models.Domain.deleteMany({ workspaceId: a.workspace._id });
 	await loginAs(a.owner);
 	const data = new FormData();
-	for (const [key, value] of Object.entries({ name: "N", slug: "n-n", fromEmail: "hi@acme.test" })) data.set(key, value);
+	for (const [key, value] of Object.entries({ name: "N", slug: "n-n", fromEmail: "hi@acme.test", replyTo: "info@acme.test" })) data.set(key, value);
 	assert.match((await actions.saveNewsletter(null, data)).error, /Add a sending domain/);
 });
 

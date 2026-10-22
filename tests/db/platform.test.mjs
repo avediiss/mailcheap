@@ -259,7 +259,7 @@ test("the newsletter limit", async () => {
 	const { saveNewsletter } = await import("@/app/(app)/newsletters/actions");
 	await loginAs(a.owner);
 	await setLimits(a, { contacts: null, emailsPerMonth: null, newsletters: 1 });
-	const result = await saveNewsletter(null, form({ name: "Second", slug: "acme-second", fromEmail: "hi@acme.test" }));
+	const result = await saveNewsletter(null, form({ name: "Second", slug: "acme-second", fromEmail: "hi@acme.test", replyTo: "info@acme.test" }));
 	assert.match(result.error, /limit of 1 newsletters/);
 	assert.equal(await db.models.Newsletter.countDocuments({ workspaceId: a.workspace._id }), 1);
 });

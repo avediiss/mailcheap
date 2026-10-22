@@ -215,8 +215,8 @@ export default function FormNewsletter({ newsletter, verifiedDomains, isSendingE
 						onChange={(event) => setFromEmail(event.target.value)}
 					/>
 				</Field>
-				<Field label="Reply-to">
-					<Input name="replyTo" type="email" defaultValue={newsletter?.replyTo} placeholder="Optional" />
+				<Field label="Reply-to" hint="Where replies go: a mailbox you read, like info@yourdomain.com. It can differ from the From email.">
+					<Input name="replyTo" type="email" defaultValue={newsletter?.replyTo} required placeholder="info@example.com" />
 				</Field>
 				<Field label="Postal address" hint="Shown in the footer of every email. Anti-spam laws require one.">
 					<Textarea
