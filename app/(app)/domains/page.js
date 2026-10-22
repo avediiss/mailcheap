@@ -19,9 +19,8 @@ import { hasRole } from "@/lib/workspace-rules";
 export const metadata = { title: "Domains" };
 
 export default async function DomainsPage() {
-	const { workspaceId, role, session, isSuspended } = await requireWorkspace();
+	const { workspaceId, role, isSuspended } = await requireWorkspace();
 	const canManage = hasRole(role, "owner") && !isSuspended;
-	const region = process.env.SES_REGION || "us-east-1";
 
 	return (
 		<>
@@ -33,16 +32,6 @@ export default async function DomainsPage() {
 						<ExternalLink data-icon="inline-end" className="opacity-60" />
 					</a>
 				</Button>
-				{/* The AWS console is the platform owner's; a client has no login there. */}
-				{session.isPlatformAdmin && (
-					<Button asChild variant="outline">
-						<a href={`https://${region}.console.aws.amazon.com/ses/home?region=${region}#/identities`} target="_blank" rel="noreferrer">
-							<ImageFavicon domain="aws.amazon.com" size={16} />
-							SES
-							<ExternalLink data-icon="inline-end" className="opacity-60" />
-						</a>
-					</Button>
-				)}
 				{canManage && <DialogAddDomain />}
 			</HeaderPage>
 			<p className="-mt-4 mb-6 max-w-2xl text-sm text-pretty text-muted-foreground animate-enter">

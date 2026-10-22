@@ -89,16 +89,18 @@ test("when AWS refuses or already has the domain, the person gets a clear answer
 	assert.match((await addDomain(null, form({ domain: "taken.io" }))).error, /already set up in the sending service/);
 	assert.equal(await db.models.Domain.countDocuments({ domain: { $in: ["denied.io", "failed.io", "taken.io"] } }), 0);
 
-	// The platform owner can adopt a domain they set up in SES by hand; removing it never deletes it from SES.
+	// The platform owner can assign a domain they set up in SES by hand, without being inside the workspace.
+	// Removing it afterwards never deletes it from SES.
 	const root = await db.models.User.create({ email: "root@platform.test", passwordHash: "x", isPlatformAdmin: true });
 	await loginAs(root);
-	const { switchWorkspace } = await import("@/app/(app)/workspaces/actions");
-	await switchWorkspace(id(a.workspace));
+	const { assignDomain } = await import("@/app/(app)/platform/actions");
 	globalThis.__sesBehavior = { create: "exists" };
-	assert.deepEqual(await addDomain(null, form({ domain: "taken.io" })), { ok: true, domain: "taken.io" });
+	assert.deepEqual(await assignDomain(null, form({ id: id(a.workspace), domain: "taken.io" })), { ok: true, domain: "taken.io" });
 	const adopted = await db.models.Domain.findOne({ domain: "taken.io" });
 	assert.equal(adopted.createdInSes, false);
+	assert.equal(await db.models.AuditLog.countDocuments({ workspaceId: a.workspace._id, action: "workspace.domain" }), 1);
 	globalThis.__sesBehavior = undefined;
+	await loginAs(a.owner);
 	globalThis.__sesIdentities.add("taken.io");
 	const { removeDomain } = await import("@/app/(app)/domains/actions");
 	assert.deepEqual(await removeDomain(id(adopted)), { ok: true });

@@ -7,9 +7,12 @@ export const INVITATION_STATUSES = ["pending", "accepted", "revoked"];
 // the database can't be used to join anything. It works once, until expiresAt.
 const invitationSchema = new mongoose.Schema(
 	{
-		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true },
+		// A workspace invitation names its workspace and role. A platform invitation (platformAdmin) names neither:
+		// it makes someone an administrator of the whole platform, with no workspace of their own.
+		workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: function () { return !this.platformAdmin; } },
+		platformAdmin: { type: Boolean, default: false },
 		email: { type: String, required: true, lowercase: true, trim: true, maxlength: 254 },
-		role: { type: String, enum: ROLES, required: true },
+		role: { type: String, enum: ROLES, required: function () { return !this.platformAdmin; } },
 		status: { type: String, enum: INVITATION_STATUSES, default: "pending" },
 		tokenHash: { type: String, required: true },
 		expiresAt: { type: Date, required: true },

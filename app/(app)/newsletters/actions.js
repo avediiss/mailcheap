@@ -96,7 +96,8 @@ function validateNewsletter(values) {
 		return "Image must be an https:// link or a path like /logos/name.webp";
 	}
 	if (!EMAIL_PATTERN.test(values.fromEmail)) return "From email is invalid";
-	if (values.replyTo && !EMAIL_PATTERN.test(values.replyTo)) return "Reply-to email is invalid";
+	if (!values.replyTo) return "Reply-to is required, so replies reach a mailbox someone reads";
+	if (!EMAIL_PATTERN.test(values.replyTo)) return "Reply-to email is invalid";
 	if (values.description.length > MAX_DESCRIPTION_LENGTH) {
 		return `Keep the description under ${MAX_DESCRIPTION_LENGTH} characters`;
 	}

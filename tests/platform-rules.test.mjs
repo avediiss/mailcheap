@@ -7,6 +7,7 @@ import {
 	MIN_SENT_FOR_HEALTH,
 	formatLimit,
 	getContactRoom,
+	getAdminRemovalProblem,
 	getEmailQuotaProblem,
 	getHealth,
 	getUsageMeter,
@@ -111,4 +112,12 @@ test("the attention list says why, most serious first", () => {
 		"Contacts close to the limit",
 	]);
 	assert.deepEqual(describeAttention({ ...base, health: "watch" }), ["Bounces or complaints are getting close to the limit"]);
+});
+
+test("an administrator can be removed only while another one remains", () => {
+	const admins = [{ userId: "1" }, { userId: "2" }];
+	assert.equal(getAdminRemovalProblem({ admins, targetUserId: "2" }), null);
+	assert.equal(getAdminRemovalProblem({ admins, targetUserId: "3" }), "This person is not a platform administrator");
+	assert.match(getAdminRemovalProblem({ admins: [admins[0]], targetUserId: "1" }), /at least one administrator/);
+	assert.equal(getAdminRemovalProblem({ admins: [], targetUserId: "1" }), "This person is not a platform administrator");
 });

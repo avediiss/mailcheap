@@ -2,12 +2,15 @@ import AvatarInitials from "@/components/AvatarInitials";
 import { ButtonSignOutEverywhere, FormPassword, FormProfile } from "@/components/FormAccount";
 import HeaderPage from "@/components/HeaderPage";
 import { roleLabel } from "@/lib/roles";
-import { requireWorkspace } from "@/lib/workspace";
+import { getWorkspaceContext } from "@/lib/workspace";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Account" };
 
 export default async function AccountPage() {
-	const { session, workspaces } = await requireWorkspace();
+	const context = await getWorkspaceContext();
+	if (!context) redirect("/login");
+	const { session, workspaces } = context;
 
 	return (
 		<>
@@ -17,13 +20,20 @@ export default async function AccountPage() {
 					<FormProfile name={session.name} email={session.email} />
 				</Section>
 
-				<Section title="Your workspaces" stagger={1}>
+				<Section title="Your access" stagger={1}>
+					{session.isPlatformAdmin && (
+						<p className="border-b border-border/60 px-4 py-3 text-sm sm:px-5">
+							<span className="font-medium">Platform administrator.</span>{" "}
+							<span className="text-muted-foreground">You run the platform from the Platform section. That access doesn’t include the inside of clients’ workspaces.</span>
+						</p>
+					)}
+					{workspaces.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground sm:px-5">No workspace. This account only runs the platform.</p>}
 					<ul className="divide-y divide-border/60">
 						{workspaces.map((workspace) => (
 							<li key={workspace.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
 								<AvatarInitials name={workspace.name} size={28} shape="square" />
 								<span className="min-w-0 flex-1 truncate text-sm font-medium">{workspace.name}</span>
-								<span className="text-sm text-muted-foreground">{session.isPlatformAdmin ? "Platform owner" : roleLabel(workspace.role)}</span>
+								<span className="text-sm text-muted-foreground">{roleLabel(workspace.role)}</span>
 							</li>
 						))}
 					</ul>

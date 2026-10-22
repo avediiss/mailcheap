@@ -35,7 +35,7 @@ export function FormAcceptInvite({ token, email }) {
 }
 
 // Someone who already has an account and is logged in as the invited address.
-export function FormJoinWorkspace({ token, workspaceName }) {
+export function FormJoinWorkspace({ token, workspaceName, isPlatform = false }) {
 	const [state, action, isPending] = useActionState(joinWorkspace, null);
 
 	return (
@@ -43,7 +43,7 @@ export function FormJoinWorkspace({ token, workspaceName }) {
 			<input type="hidden" name="token" value={token} />
 			{state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 			<Button type="submit" size="lg" disabled={isPending}>
-				{isPending ? <Loader2 className="animate-spin" /> : `Join ${workspaceName}`}
+				{isPending ? <Loader2 className="animate-spin" /> : isPlatform ? "Accept the invitation" : `Join ${workspaceName}`}
 			</Button>
 		</form>
 	);

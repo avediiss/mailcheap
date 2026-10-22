@@ -11,11 +11,9 @@ import CookieTimezone from "@/components/CookieTimezone";
 import ListDomainStatus from "@/components/ListDomainStatus";
 import ListStats from "@/components/ListStats";
 import SkeletonCampaigns from "@/components/SkeletonCampaigns";
-import StripSesAccount from "@/components/StripSesAccount";
 import {
 	SkeletonDomainList,
 	SkeletonSends,
-	SkeletonSesAccount,
 	SkeletonStats,
 	SkeletonSubscribers,
 } from "@/components/SkeletonOverview";
@@ -34,7 +32,7 @@ import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from 
 import { getEmailStats, getHourlySends, getSubscriberHistory } from "@/lib/overview-data";
 import { PERIOD_DAYS } from "@/lib/overview-series";
 import { getWorkspaceUsage } from "@/lib/quota";
-import { estimateCost, formatCost, getPricePer1000, startOfMonth } from "@/lib/send-cost";
+import { startOfMonth } from "@/lib/send-cost";
 import { listSesDomains } from "@/lib/ses";
 import { TIME_ZONE_COOKIE, resolveTimeZone, timeZoneLabel } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
@@ -44,7 +42,7 @@ import Message from "@/models/Message";
 // Everything above Domains is about one newsletter, the largest unless ?newsletter= picks one. The page
 // waits for one query (the tabs); every section then loads on its own behind a skeleton of its size.
 export default async function OverviewPage({ searchParams }) {
-	const [{ newsletter: newsletterParam }, cookieStore, { workspaceId, session }] = await Promise.all([
+	const [{ newsletter: newsletterParam }, cookieStore, { workspaceId }] = await Promise.all([
 		searchParams,
 		cookies(),
 		requireWorkspace(),
@@ -108,7 +106,7 @@ export default async function OverviewPage({ searchParams }) {
 
 						<Section title="This month" stagger={3}>
 							<Suspense key="send-cost" fallback={null}>
-								<CardSendCost workspaceId={workspaceId} newsletters={newsletters} showCost={session.isPlatformAdmin} />
+								<CardSendCost workspaceId={workspaceId} newsletters={newsletters} />
 							</Suspense>
 						</Section>
 
@@ -135,15 +133,6 @@ export default async function OverviewPage({ searchParams }) {
 						<SectionDomains workspaceId={workspaceId} />
 					</Suspense>
 				</Section>
-
-				{/* The SES account is shared by every workspace: its quota and health are the platform owner's. */}
-				{session.isPlatformAdmin && (
-					<Section title="System" stagger={5}>
-						<Suspense fallback={<SkeletonSesAccount />}>
-							<StripSesAccount />
-						</Suspense>
-					</Section>
-				)}
 			</div>
 		</>
 	);
@@ -217,9 +206,9 @@ async function CardSends({ workspaceId, newsletterId, timeZone }) {
 	);
 }
 
-// Amazon bills by the email, so this adds up every newsletter of the workspace. It's an estimate:
-// SES's own bill also has small items, and the price is SES_PRICE_PER_1000 (default $0.10).
-async function CardSendCost({ workspaceId, newsletters, showCost }) {
+// Emails sent this month, across the workspace's newsletters. What they cost is the platform owner's business and
+// is shown on the platform overview, never here.
+async function CardSendCost({ workspaceId, newsletters }) {
 	const since = startOfMonth();
 	const counts = await Promise.all(
 		newsletters.map(({ _id }) =>
@@ -227,16 +216,9 @@ async function CardSendCost({ workspaceId, newsletters, showCost }) {
 		)
 	);
 	const emails = counts.reduce((sum, count) => sum + count, 0);
-	const price = getPricePer1000();
-
 	return (
 		<div className="animate-fade-in">
-			<CardStat
-				label="Emails sent this month"
-				value={formatNumber(emails)}
-				// What each email costs is the platform owner's business, not the client's.
-				detail={showCost ? `About ${formatCost(estimateCost(emails, price))} on Amazon SES, at $${price.toFixed(2)} per 1,000` : undefined}
-			/>
+			<CardStat label="Emails sent this month" value={formatNumber(emails)} />
 		</div>
 	);
 }

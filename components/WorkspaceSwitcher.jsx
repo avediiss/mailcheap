@@ -18,13 +18,13 @@ import { roleLabel } from "@/lib/roles";
 
 // Shows which workspace you're working in. With several, it's a menu to move between them; with one it
 // is only a label, since there's nothing to choose.
-export default function WorkspaceSwitcher({ workspaces, currentId, isPlatformAdmin }) {
+export default function WorkspaceSwitcher({ workspaces, currentId }) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const current = workspaces.find(({ id }) => id === currentId) ?? workspaces[0];
 	if (!current) return null;
 
-	const subtitle = isPlatformAdmin ? "Platform owner" : roleLabel(current.role);
+	const subtitle = roleLabel(current.role);
 	const label = (
 		<>
 			<AvatarInitials name={current.name} size={28} shape="square" />

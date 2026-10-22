@@ -21,7 +21,7 @@ beforeEach(async () => {
 const id = (doc) => String(doc._id);
 function settings(tenant, fields) {
 	const data = new FormData();
-	const base = { id: id(tenant.newsletter), name: "Weekly", slug: tenant.newsletter.slug, fromEmail: tenant.newsletter.fromEmail, archiveEnabled: "on", ...fields };
+	const base = { id: id(tenant.newsletter), name: "Weekly", slug: tenant.newsletter.slug, fromEmail: tenant.newsletter.fromEmail, replyTo: `info@${tenant.domain}`, archiveEnabled: "on", ...fields };
 	for (const [key, value] of Object.entries(base)) data.set(key, value);
 	return data;
 }
@@ -97,4 +97,14 @@ test("answers are cached for a minute, the environment variable still works, and
 	assert.equal(isDashboardHost("mailcheap.test"), true);
 	assert.equal(isDashboardHost("localhost:3000"), true);
 	assert.equal(isDashboardHost("news.acme-letters.org"), false);
+});
+
+test("a newsletter needs a reply-to address, and a malformed one is refused", async () => {
+	const { saveNewsletter } = await import("@/app/(app)/newsletters/actions");
+	await loginAs(a.owner);
+	assert.match((await saveNewsletter(null, settings(a, { replyTo: "" }))).error, /Reply-to is required/);
+	assert.match((await saveNewsletter(null, settings(a, { replyTo: "not-an-email" }))).error, /Reply-to email is invalid/);
+	assert.equal((await db.models.Newsletter.findById(a.newsletter._id)).replyTo, undefined, "nothing saved by the refused tries");
+	assert.equal((await saveNewsletter(null, settings(a, { replyTo: "Info@Acme.test" }))).ok, true);
+	assert.equal((await db.models.Newsletter.findById(a.newsletter._id)).replyTo, "info@acme.test");
 });

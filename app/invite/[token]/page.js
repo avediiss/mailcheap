@@ -4,6 +4,7 @@ import { FormAcceptInvite, FormJoinWorkspace } from "@/components/FormAcceptInvi
 import LogoApp from "@/components/LogoApp";
 import { Button } from "@/components/ui/button";
 import { getSession } from "@/lib/auth";
+import { APP_NAME } from "@/lib/config";
 import { findInvitationByToken } from "@/lib/members";
 
 export const metadata = { title: "Join a workspace", referrer: "no-referrer" };
@@ -42,6 +43,14 @@ function Heading({ invitation }) {
 			</>
 		);
 	}
+	if (invitation.isPlatformInvite) {
+		return (
+			<>
+				<h1 className="text-lg font-semibold tracking-tight">Join the {APP_NAME} team</h1>
+				<p className="text-sm text-pretty text-muted-foreground">You’ve been invited as a platform administrator.</p>
+			</>
+		);
+	}
 	return (
 		<>
 			<h1 className="text-lg font-semibold tracking-tight">Join {invitation.workspaceName}</h1>
@@ -69,7 +78,7 @@ function Body({ invitation, session, token }) {
 	if (!invitation.hasAccount) return <FormAcceptInvite token={token} email={invitation.email} />;
 
 	// They have an account: they must be logged in as the invited address to accept.
-	if (session?.email === invitation.email) return <FormJoinWorkspace token={token} workspaceName={invitation.workspaceName} />;
+	if (session?.email === invitation.email) return <FormJoinWorkspace token={token} workspaceName={invitation.workspaceName} isPlatform={invitation.isPlatformInvite} />;
 	if (session) {
 		return (
 			<div className="flex flex-col gap-4 text-center text-sm">

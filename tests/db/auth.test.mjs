@@ -89,7 +89,7 @@ test("a reset link works once, expires, and signs the person out everywhere", as
 	assert.match((await resetPassword(expired.token, "yet another good password")).error, /expired/);
 });
 
-test("the workspace a person works in: members get theirs, the platform owner gets all, and the cookie can't reach others", async () => {
+test("the workspace a person works in: only the ones they belong to, even for the platform owner, and the cookie can't reach others", async () => {
 	const { getWorkspaceContext, requireWorkspace, WORKSPACE_COOKIE } = await import("@/lib/workspace");
 	const { switchWorkspace } = await import("@/app/(app)/workspaces/actions");
 	const a = await makeTenant(db.models, { name: "Acme", slug: "acme", withEditor: true });
@@ -111,12 +111,20 @@ test("the workspace a person works in: members get theirs, the platform owner ge
 	await loginAs(a.editor);
 	assert.equal((await getWorkspaceContext()).role, "editor");
 
+	// The platform owner controls workspaces from the console but is not let inside any of them.
 	await loginAs(root);
 	context = await getWorkspaceContext();
-	assert.deepEqual(context.workspaces.map(({ slug }) => slug), ["acme", "birch"]);
-	assert.equal(context.role, "owner");
-	assert.deepEqual(await switchWorkspace(String(b.workspace._id)), { ok: true });
-	assert.equal(String(globalThis.__testRequest.cookies.get(WORKSPACE_COOKIE)), String(b.workspace._id));
+	assert.equal(context.session.isPlatformAdmin, true);
+	assert.deepEqual(context.workspaces, []);
+	assert.equal(context.workspace, null);
+	assert.equal((await switchWorkspace(String(b.workspace._id))).error, "Workspace not found");
+	assert.equal((await catching(() => requireWorkspace())).redirectTo, "/platform", "their home is the console");
+
+	// Invited into one, they see that one and no other.
+	await db.models.Membership.create({ userId: root._id, workspaceId: b.workspace._id, role: "editor" });
+	context = await getWorkspaceContext();
+	assert.deepEqual(context.workspaces.map(({ slug }) => slug), ["birch"]);
+	assert.equal(context.role, "editor", "being the platform owner adds no rights inside it");
 
 	const lonely = await db.models.User.create({ email: "lonely@x.test", passwordHash: "x" });
 	await loginAs(lonely);

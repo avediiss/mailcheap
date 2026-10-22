@@ -3,10 +3,10 @@ import { Building2 } from "lucide-react";
 import AvatarInitials from "@/components/AvatarInitials";
 import BadgeHealth from "@/components/BadgeHealth";
 import BadgeStatus from "@/components/BadgeStatus";
-import ButtonOpenWorkspace from "@/components/ButtonOpenWorkspace";
 import DialogCreateWorkspace from "@/components/DialogCreateWorkspace";
 import HeaderPage from "@/components/HeaderPage";
 import MeterUsage from "@/components/MeterUsage";
+import { Button } from "@/components/ui/button";
 import StateEmpty from "@/components/StateEmpty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requirePlatformAdmin } from "@/lib/auth";
@@ -48,7 +48,9 @@ export default async function WorkspacesPage() {
 							<MeterUsage label="Emails this month" meter={row.emailsMeter} compact />
 							<div className="flex items-center justify-between gap-3">
 								<BadgeHealth health={row.health} />
-								<ButtonOpenWorkspace id={row.id} size="sm" />
+								<Button asChild variant="outline" size="sm">
+									<Link href={`/platform/workspaces/${row.id}`}>Details</Link>
+								</Button>
 							</div>
 						</li>
 					))}
@@ -91,7 +93,9 @@ export default async function WorkspacesPage() {
 										<BadgeHealth health={row.health} />
 									</TableCell>
 									<TableCell className="pr-2 text-right">
-										<ButtonOpenWorkspace id={row.id} size="sm" />
+										<Button asChild variant="outline" size="sm">
+											<Link href={`/platform/workspaces/${row.id}`}>Details</Link>
+										</Button>
 									</TableCell>
 								</TableRow>
 							))}

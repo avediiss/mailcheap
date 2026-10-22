@@ -6,10 +6,10 @@ import { Building2, Globe, KeyRound, LayoutGrid, Newspaper, Send, ShieldCheck, U
 import { hasRole } from "@/lib/workspace-rules";
 import { cn } from "@/lib/utils";
 
-export default function NavLinks({ onNavigate, role, isPlatformAdmin = false }) {
+export default function NavLinks({ onNavigate, role, isPlatformAdmin = false, showWorkspace = true }) {
 	const pathname = usePathname();
 
-	const items = NAV_ITEMS.filter(({ requires }) => !requires || hasRole(role, requires));
+	const items = showWorkspace ? NAV_ITEMS.filter(({ requires }) => !requires || hasRole(role, requires)) : [];
 
 	return (
 		<nav className="flex flex-col gap-0.5">
@@ -18,7 +18,7 @@ export default function NavLinks({ onNavigate, role, isPlatformAdmin = false }) 
 			))}
 			{isPlatformAdmin && (
 				<>
-					<span className="mt-4 mb-1 px-2.5 text-xs font-medium text-muted-foreground/70">Platform</span>
+					<span className={`${showWorkspace ? "mt-4" : ""} mb-1 px-2.5 text-xs font-medium text-muted-foreground/70`}>Platform</span>
 					{PLATFORM_ITEMS.map((item) => (
 						<NavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
 					))}
@@ -61,4 +61,5 @@ const NAV_ITEMS = [
 const PLATFORM_ITEMS = [
 	{ href: "/platform", label: "Overview", icon: ShieldCheck, exact: true },
 	{ href: "/platform/workspaces", label: "Workspaces", icon: Building2 },
+	{ href: "/platform/team", label: "Team", icon: UserCog },
 ];
