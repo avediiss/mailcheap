@@ -1,7 +1,13 @@
 import AvatarInitials from "@/components/AvatarInitials";
 import { ButtonSignOutEverywhere, FormPassword, FormProfile } from "@/components/FormAccount";
+import PanelTwoFactor from "@/components/PanelTwoFactor";
 import HeaderPage from "@/components/HeaderPage";
+import { isAdminTwoFactorRequired } from "@/lib/config";
+import { connectDb } from "@/lib/db";
+import { formatDate } from "@/lib/format";
 import { roleLabel } from "@/lib/roles";
+import { countRecoveryCodes } from "@/lib/two-factor";
+import User from "@/models/User";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { redirect } from "next/navigation";
 
@@ -11,6 +17,10 @@ export default async function AccountPage() {
 	const context = await getWorkspaceContext();
 	if (!context) redirect("/login");
 	const { session, workspaces } = context;
+	const isRequired = session.isPlatformAdmin && isAdminTwoFactorRequired();
+	const needsSetup = isRequired && !session.twoFactorEnabled;
+	await connectDb();
+	const { twoFactor } = (await User.findById(session.userId).select({ "twoFactor.enabledAt": 1, "twoFactor.recoveryCodes": 1 }).lean()) ?? {};
 
 	return (
 		<>
@@ -39,11 +49,25 @@ export default async function AccountPage() {
 					</ul>
 				</Section>
 
-				<Section title="Password" stagger={2}>
+				<Section title="Two-factor login" stagger={2}>
+					{needsSetup && (
+						<p className="border-b border-border/60 bg-amber-500/10 px-4 py-3 text-sm text-pretty text-amber-800 sm:px-5 dark:text-amber-300">
+							Platform administrators need two-factor login. Turn it on to open the Platform section.
+						</p>
+					)}
+					<PanelTwoFactor
+						isOn={Boolean(twoFactor?.enabledAt)}
+						since={twoFactor?.enabledAt ? formatDate(twoFactor.enabledAt) : ""}
+						recoveryLeft={countRecoveryCodes({ twoFactor })}
+						isRequired={isRequired}
+					/>
+				</Section>
+
+				<Section title="Password" stagger={3}>
 					<FormPassword />
 				</Section>
 
-				<Section title="Sessions" stagger={3}>
+				<Section title="Sessions" stagger={4}>
 					<div className="flex flex-col items-start gap-3 p-4 sm:p-5">
 						<p className="text-sm text-pretty text-muted-foreground">
 							Lost a device, or used a shared computer? This logs you out on every browser, this one included.

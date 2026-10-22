@@ -7,6 +7,7 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
 import { addWorkspaceDomain } from "@/lib/domains";
 import { inviteMember } from "@/lib/members";
+import { resetTwoFactor } from "@/lib/two-factor";
 import { sendAccountReset, setAccountDisabled, signOutAccount } from "@/lib/platform-accounts";
 import { invitePlatformAdmin, removePlatformAdmin, revokePlatformInvitation } from "@/lib/platform-team";
 import { readLimits, slugifyWorkspaceName } from "@/lib/platform-rules";
@@ -157,4 +158,9 @@ export async function signOutAccountAction(userId) {
 
 export async function sendAccountResetAction(userId) {
 	return runAccountAction(userId, (actor) => sendAccountReset({ actor, userId }));
+}
+
+// For someone who lost their phone and their recovery codes: they are signed out everywhere and set it up again.
+export async function resetAccountTwoFactorAction(userId) {
+	return runAccountAction(userId, (actor) => resetTwoFactor({ actor, userId }));
 }

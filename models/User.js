@@ -12,6 +12,16 @@ const userSchema = new mongoose.Schema(
 		sessionVersion: { type: Number, default: 0 },
 		disabledAt: { type: Date },
 		lastLoginAt: { type: Date },
+		// Two-factor login (lib/two-factor.js). secret and pendingSecret are encrypted; recoveryCodes are keyed hashes,
+		// each removed when used. lastUsedStep stops a code being used twice.
+		twoFactor: {
+			secret: { type: String },
+			enabledAt: { type: Date },
+			lastUsedStep: { type: Number },
+			recoveryCodes: [{ type: String }],
+			pendingSecret: { type: String },
+			pendingAt: { type: Date },
+		},
 		// A password-reset link: only the hash is kept, and it works once, before expiresAt.
 		passwordReset: {
 			tokenHash: { type: String },

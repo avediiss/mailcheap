@@ -129,6 +129,25 @@ page has its daily chart, open/click rates and cost.
   unverified after 3 days is flagged), and SES identities that belong to no workspace.
 - **Activity** (`/platform/activity`): the full log, filtered by workspace and action, 50 at a time.
 
+### Two-factor login
+
+Anyone can turn on a second step for their login from **Account → Two-factor login**: a 6-digit code from an
+authenticator app (Google Authenticator, 1Password, Authy...). Setup shows a QR code and the key to type in, asks for
+the first code, then shows **10 recovery codes** once; each works one time if the phone is lost.
+
+- **Platform administrators must have it.** Without it, every Platform page sends them to the account page to set it
+  up, and they can't turn it off. `REQUIRE_ADMIN_2FA=false` in the environment is the emergency switch.
+- **Login** is two steps: password, then `/login/verify`. The password alone starts no session; the step in between is
+  a signed, five-minute cookie that can't be used as a session. It dies if the password changes or the account is
+  disabled in between. Five wrong codes in 15 minutes stop further tries for that person.
+- **An app code works once** (replaying a code seen over a shoulder is refused), within 30 seconds either side of now.
+- **Stored safely:** the secret is encrypted with a key derived from `SESSION_SECRET` and recovery codes are keyed
+  hashes, so a copy of the database alone is not enough. **Changing `SESSION_SECRET` makes every stored secret
+  unreadable**: everyone with two-factor on would have to be reset (below). Plan that before rotating it.
+- **Lost phone and recovery codes:** another administrator opens **Accounts → ⋯ → Remove two-factor login**. The
+  person is signed out everywhere and sets it up again. If the only administrator is locked out, run on your own
+  computer: `MONGODB_URI='...' node scripts/reset-2fa.mjs you@example.com`, then log in with the password.
+
 ### Limits (all optional; empty means none)
 
 | Limit | What it counts | What happens at the limit |

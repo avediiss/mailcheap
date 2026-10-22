@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, LogOut, MailCheck, MoreHorizontal, RotateCcw } from "lucide-react";
+import { Ban, KeyRound, LogOut, MailCheck, MoreHorizontal, RotateCcw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { sendAccountResetAction, setAccountDisabledAction, signOutAccountAction } from "@/app/(app)/platform/actions";
+import { resetAccountTwoFactorAction, sendAccountResetAction, setAccountDisabledAction, signOutAccountAction } from "@/app/(app)/platform/actions";
 import AvatarInitials from "@/components/AvatarInitials";
 import DialogConfirm from "@/components/DialogConfirm";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { roleLabel } from "@/lib/roles";
 // administrator can do to an account. Disabling signs the person out at once.
 export default function ListAccounts({ accounts, currentUserId }) {
 	const [disabling, setDisabling] = useState(null);
+	const [resetting, setResetting] = useState(null);
 
 	async function run(action, successMessage) {
 		const result = await action();
@@ -32,6 +33,7 @@ export default function ListAccounts({ accounts, currentUserId }) {
 								<span className="truncate">{account.name || account.email}</span>
 								{account.id === currentUserId && <Pill>You</Pill>}
 								{account.isPlatformAdmin && <Pill>Administrator</Pill>}
+								{account.hasTwoFactor && <Pill><ShieldCheck className="mr-0.5 inline size-3" />2FA</Pill>}
 								{account.isDisabled && <Pill tone="bad">Disabled</Pill>}
 							</span>
 							<span className="truncate text-xs text-muted-foreground">
@@ -53,6 +55,12 @@ export default function ListAccounts({ accounts, currentUserId }) {
 									<DropdownMenuItem onSelect={() => run(() => sendAccountResetAction(account.id), `Reset email sent to ${account.email}`)}>
 										<MailCheck />
 										Send a password reset
+									</DropdownMenuItem>
+								)}
+								{account.hasTwoFactor && account.id !== currentUserId && (
+									<DropdownMenuItem onSelect={() => setResetting(account)}>
+										<KeyRound />
+										Remove two-factor login
 									</DropdownMenuItem>
 								)}
 								<DropdownMenuItem onSelect={() => run(() => signOutAccountAction(account.id), "Signed out everywhere")}>
@@ -85,6 +93,16 @@ export default function ListAccounts({ accounts, currentUserId }) {
 				successMessage="Account disabled"
 				destructive
 				onConfirm={() => setAccountDisabledAction(disabling.id, true)}
+			/>
+			<DialogConfirm
+				open={Boolean(resetting)}
+				onOpenChange={(open) => !open && setResetting(null)}
+				title={`Remove two-factor login for ${resetting?.name || resetting?.email}?`}
+				description="Use this when they lost their phone and their recovery codes. They’re signed out everywhere, and log in with the password alone until they set it up again. Only do it once you’re sure it’s really them."
+				confirmLabel="Remove"
+				successMessage="Two-factor login removed"
+				destructive
+				onConfirm={() => resetAccountTwoFactorAction(resetting.id)}
 			/>
 		</>
 	);
