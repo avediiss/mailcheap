@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ChevronRight, ShieldCheck } from "lucide-react";
+import { ChevronRight, ShieldAlert, ShieldCheck } from "lucide-react";
 import AvatarInitials from "@/components/AvatarInitials";
 import BadgeHealth from "@/components/BadgeHealth";
 import CardChart from "@/components/CardChart";
@@ -21,6 +21,7 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { LIMITS } from "@/lib/config";
 import { formatNumber, formatRate, formatSigned } from "@/lib/format";
 import { getPlatformInsights } from "@/lib/platform-insights";
+import { listPendingReviews } from "@/lib/content-review";
 import { listSendingProblems } from "@/lib/platform-problems";
 import { getPlatformTotals, listWorkspaceSummaries } from "@/lib/platform";
 import { describeAttention, rankAttention } from "@/lib/platform-rules";
@@ -37,7 +38,7 @@ export default async function PlatformPage({ searchParams }) {
 	const range = parseRange((await searchParams)?.range);
 	const rows = await listWorkspaceSummaries();
 	const names = new Map(rows.map(({ id, name }) => [id, name]));
-	const [insights, activity, problems] = await Promise.all([getPlatformInsights({ range, names }), listAudit({ limit: 8 }), listSendingProblems()]);
+	const [insights, activity, problems, reviews] = await Promise.all([getPlatformInsights({ range, names }), listAudit({ limit: 8 }), listSendingProblems(), listPendingReviews()]);
 
 	const totals = getPlatformTotals(rows);
 	const attention = rankAttention(rows).slice(0, 6);
@@ -72,6 +73,15 @@ export default async function PlatformPage({ searchParams }) {
 			</HeaderPage>
 
 			<div className="flex flex-col gap-8">
+				{reviews.length > 0 && (
+					<Link href="/platform/review" className="flex items-center gap-3 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-800 transition-colors duration-150 hover:bg-amber-500/15 dark:text-amber-300">
+						<ShieldAlert className="size-4 shrink-0" />
+						<span className="flex-1">
+							{reviews.length} {reviews.length === 1 ? "issue is" : "issues are"} waiting for your review before {reviews.length === 1 ? "it" : "they"} can be sent.
+						</span>
+						<ChevronRight className="size-4 shrink-0" />
+					</Link>
+				)}
 				<div className="grid grid-cols-2 gap-3 animate-enter lg:grid-cols-3">
 					<CardStat label="Workspaces" value={formatNumber(totals.workspaces)} detail={`${formatNumber(totals.active)} active · ${formatNumber(totals.suspended)} suspended`} />
 					<CardStat label="Subscribers" value={formatNumber(totals.contacts)} detail={`${formatSigned(net)} net in ${range} days`} tone={net < 0 ? "warn" : "default"} />

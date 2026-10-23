@@ -18,6 +18,19 @@ const campaignSchema = new mongoose.Schema(
 		status: { type: String, enum: CAMPAIGN_STATUSES, default: "draft" },
 		// Warm-up: send to the most engaged contacts first, capped at audienceLimit.
 		audienceLimit: { type: Number, min: 1 },
+		// What the platform told the sender about how this went out: spread over days, a slice sent first.
+		sendNotes: [{ type: String }],
+		// A person at the platform looks at an issue the automatic scan flagged (lib/content-review.js). The decision
+		// belongs to the exact text it was made for: any edit asks again.
+		review: {
+			status: { type: String, enum: ["pending", "approved", "rejected"] },
+			hash: { type: String },
+			reasons: [{ type: String }],
+			requestedAt: { type: Date },
+			decidedAt: { type: Date },
+			decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+			note: { type: String, maxlength: 500 },
+		},
 		// Who it goes to: all active contacts, or only a tag and/or signup source, or only the people who
 		// didn't open an earlier campaign (lib/audience.js, lib/non-openers.js).
 		audience: {

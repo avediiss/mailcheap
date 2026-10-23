@@ -148,6 +148,37 @@ the first code, then shows **10 recovery codes** once; each works one time if th
   person is signed out everywhere and sets it up again. If the only administrator is locked out, run on your own
   computer: `MONGODB_URI='...' node scripts/reset-2fa.mjs you@example.com`, then log in with the password.
 
+### Safe sending (Phase A)
+
+Every client sends through one shared Amazon SES account, so the platform protects it. All of this is per client, and
+a platform administrator can see and change it from the client's page in the console.
+
+- **Addresses that are refused** at signup (form and API) and import: typos of the big providers (`gmial.com`, with a
+  "did you mean" hint), throwaway inboxes (a bundled list of about 10,000 domains from the CC0
+  `disposable-email-domains` project, `lib/data/disposable-domains.js`), domains on the platform's own blocklist
+  (**Domains → Blocked email domains**) and domains that can't receive email (a DNS lookup; `ADDRESS_CHECK_DNS=off`
+  turns it off, and a failed lookup never blocks anyone). People already on a list are never turned away, and rows that
+  record an unsubscribe, bounce or complaint are always kept. The API answers `422` with `reason` and `suggestion`.
+- **Warm-up.** A new sender may send 200 emails a day, doubling every three days for the first month; after that, five
+  times its busiest recent day (never under 2,000). A send reaches at most what the next three days allow (the most
+  engaged people first; "Send to more" does the rest), each batch is queued with the delay for its day, and the batch
+  sender enforces the amount again. Welcome and confirmation emails are not held. If its numbers are already close to the
+  limits the amount stops growing. **Trusted sender** (client page → Sending speed) removes all of it, or set a daily
+  amount of your own. The client sees where it stands on their overview.
+- **New people go in a slice.** In a send to more than 200 people who have never had an email from the workspace, 5%
+  (200 to 2,000) go first and the rest 3 hours later; the usual pause rules look at the first slice before the rest
+  goes out.
+- **Pauses and blocks.** A send pauses above 2% hard bounces (at least 5) or 0.08% spam complaints (at least 2) once 50
+  are out. A whole workspace is **blocked** (suspended, with the reason, owners and platform told) above 5% bounces (at
+  least 10) or 0.3% complaints (at least 3) over the last 7 days, checked when a bounce or complaint arrives and before
+  each batch. Resuming it starts the count afresh from that moment.
+- **Review of risky issues.** An issue with a link whose shown address differs from where it goes, a link to a
+  program, a "verify your password" lure, crypto wallet secrets or a prize-with-a-fee scam waits in **Review** until an
+  administrator approves or turns it down with a reason (the sender is emailed). A decision belongs to the exact text:
+  any edit asks again. Welcome, confirmation and series emails that trip the scan can't be saved. Weaker signs
+  (capitals, repeated `!`, "100% free", fake `Re:`, link shorteners) show as tips in the pre-send checks and never block.
+  This is the one place an administrator reads a client's email, and only what was flagged; it is audited.
+
 ### Limits (all optional; empty means none)
 
 | Limit | What it counts | What happens at the limit |

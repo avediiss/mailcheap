@@ -124,16 +124,19 @@ test("from names are quoted, encoded, and can't inject headers", () => {
 	);
 });
 
-test("campaigns pause above the bounce or complaint limit once 100 are sent", () => {
+test("campaigns pause above the bounce or complaint limit, once enough are sent and more than a stray few have gone wrong", () => {
 	assert.equal(LIMITS.bounceRate, 0.02);
 	assert.equal(LIMITS.complaintRate, 0.0008);
 
 	assert.equal(getCampaignPauseReason(), null);
-	assert.equal(getCampaignPauseReason({ sent: 99, bounced: 50, complained: 10 }), null);
-	assert.equal(getCampaignPauseReason({ sent: 100, bounced: 2 }), null);
-	assert.equal(getCampaignPauseReason({ sent: 100, bounced: 3 }), "bounce rate");
+	assert.equal(getCampaignPauseReason({ sent: 49, bounced: 50, complained: 10 }), null, "too few sent to judge");
+	assert.equal(getCampaignPauseReason({ sent: 100, bounced: 2 }), null, "2% exactly is not over");
+	assert.equal(getCampaignPauseReason({ sent: 100, bounced: 4 }), null, "over 2%, but fewer than 5 bounces");
+	assert.equal(getCampaignPauseReason({ sent: 100, bounced: 5 }), "bounce rate");
+	assert.equal(getCampaignPauseReason({ sent: 50, bounced: 5 }), "bounce rate", "a small send is judged too");
 	assert.equal(getCampaignPauseReason({ sent: 1250, complained: 1 }), null);
-	assert.equal(getCampaignPauseReason({ sent: 1000, complained: 1 }), "complaint rate");
+	assert.equal(getCampaignPauseReason({ sent: 1000, complained: 1 }), null, "one complaint is not a pattern");
+	assert.equal(getCampaignPauseReason({ sent: 1000, complained: 2 }), "complaint rate");
 	assert.equal(getCampaignPauseReason({ sent: 5000, bounced: 99, complained: 4 }), null);
 });
 

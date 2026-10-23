@@ -4,7 +4,8 @@ import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { withEngagement } from "@/lib/cleanup";
 import { getErasedEmail, getSuppressionReasonOnDelete } from "@/lib/contact-delete";
-import { importContactRows } from "@/lib/contact-import";
+import { checkAddress } from "@/lib/address-check";
+import { importCheckedRows } from "@/lib/contact-import-checked";
 import { MAX_IMPORT_ROWS_PER_REQUEST, normalizeTags } from "@/lib/csv-import";
 import { connectDb } from "@/lib/db";
 import { toFirstName } from "@/lib/merge-tags";
@@ -33,7 +34,7 @@ export async function importContacts({ newsletterId, rows }) {
 	if (!newsletter) return { error: "Newsletter not found" };
 
 	const { room } = await getContactRoomFor(workspaceId);
-	const result = await importContactRows({ workspaceId, newsletterId: newsletter._id, rows, room });
+	const result = await importCheckedRows({ workspaceId, newsletterId: newsletter._id, rows, room });
 	revalidatePath("/contacts");
 	return result;
 }
@@ -49,8 +50,12 @@ export async function addContact({ newsletterId, email, firstName, tags }) {
 	const newsletter = await findOwnNewsletter(workspaceId, newsletterId);
 	if (!newsletter) return { error: "Newsletter not found" };
 
+	// One address typed by hand: say exactly what is wrong with it, and offer the fix for a typo.
+	const problem = await checkAddress(normalized);
+	if (problem) return { error: problem.message };
+
 	const { room } = await getContactRoomFor(workspaceId);
-	const { created, skippedOverLimit } = await importContactRows({
+	const { created, skippedOverLimit } = await importCheckedRows({
 		workspaceId,
 		newsletterId: newsletter._id,
 		room,

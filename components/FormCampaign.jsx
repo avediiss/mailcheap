@@ -27,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatNumber } from "@/lib/format";
 import { markdownToHtml } from "@/lib/markdown";
 import { applyMergeTags } from "@/lib/merge-tags";
+import { scanContent } from "@/lib/content-scan";
 import { getPresendChecks } from "@/lib/presend-checks";
 import { UNSUBSCRIBE_PLACEHOLDER, renderEmail, withResponsiveImages } from "@/lib/render-email";
 import { slugify } from "@/lib/slug";
@@ -89,6 +90,7 @@ export default function FormCampaign({
 		rendered,
 		isDomainVerified,
 		isSendingEnabled,
+		scan: useMemo(() => scanContent({ subject: deferredValues.subject, previewText: deferredValues.previewText, body: deferredValues.body }), [deferredValues]),
 	});
 
 	async function persist() {

@@ -12,6 +12,7 @@ const STUBS = {
 	"next/navigation": "stubs/next-navigation.mjs",
 	"next/server": "stubs/next-server.mjs",
 	"@/lib/ses": "stubs/ses.mjs",
+	"@upstash/qstash": "stubs/qstash.mjs",
 };
 const EXTENSIONS = ["", ".js", ".jsx", "/index.js"];
 

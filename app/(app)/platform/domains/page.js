@@ -2,9 +2,12 @@ import Link from "next/link";
 import { Globe, TriangleAlert } from "lucide-react";
 import BadgeStatus from "@/components/BadgeStatus";
 import HeaderPage from "@/components/HeaderPage";
+import ListBlockedDomains from "@/components/ListBlockedDomains";
 import StateEmpty from "@/components/StateEmpty";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { connectDb } from "@/lib/db";
 import { listPlatformDomains, STUCK_AFTER_DAYS } from "@/lib/platform-domains";
+import BlockedDomain from "@/models/BlockedDomain";
 
 export const metadata = { title: "Domains" };
 
@@ -14,6 +17,8 @@ export default async function PlatformDomainsPage() {
 	await requirePlatformAdmin();
 	const { sesError, domains, unassigned } = await listPlatformDomains();
 	const stuck = domains.filter(({ isStuck }) => isStuck);
+	await connectDb();
+	const blocked = (await BlockedDomain.find().sort({ createdAt: -1 }).select({ domain: 1, reason: 1 }).lean()).map(({ domain, reason }) => ({ domain, reason: reason ?? "" }));
 
 	return (
 		<>
@@ -57,6 +62,15 @@ export default async function PlatformDomainsPage() {
 						))}
 					</ul>
 				)}
+
+				<section className="flex flex-col gap-2">
+					<h2 className="text-sm font-medium text-muted-foreground">Blocked email domains</h2>
+					<p className="text-xs text-pretty text-muted-foreground">
+						Signups and imports from these domains (and anything under them) are refused for every client. Typos like gmial.com and about 10,000 throwaway
+						domains are already refused.
+					</p>
+					<ListBlockedDomains domains={blocked} />
+				</section>
 
 				{unassigned.length > 0 && (
 					<section className="flex flex-col gap-2">

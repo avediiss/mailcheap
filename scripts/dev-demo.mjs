@@ -9,7 +9,10 @@ import crypto from "node:crypto";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { hashPassword } from "../lib/passwords.js";
+import { contentHash } from "../lib/content-hash.js";
+import { scanContent } from "../lib/content-scan.js";
 import { createInviteToken, getInviteExpiry } from "../lib/invitation-rules.js";
+import BlockedDomain from "../models/BlockedDomain.js";
 import Campaign from "../models/Campaign.js";
 import Contact from "../models/Contact.js";
 import Domain from "../models/Domain.js";
@@ -115,6 +118,18 @@ await Message.insertMany(Array.from({ length: 30 }, (_, index) => ({ kind: "welc
 const startOfMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
 const acmeThisMonth = await Message.countDocuments({ workspaceId: acme.workspace._id, sentAt: { $gte: startOfMonth } });
 await Workspace.updateOne({ _id: acme.workspace._id }, { $set: { limits: { contacts: 40, emailsPerMonth: Math.max(Math.round(acmeThisMonth / 0.85), 20), newsletters: 3 } } });
+// A new sender in its fourth day of warm-up, a flagged issue waiting for review, a blocked workspace and a blocked domain.
+const elm = await tenant({ name: "Elm Collective", slug: "elm", domain: "elm.test", owner: await user("owner@elm.test", "Elm Owner"), newsletterName: "Elm Letters", contacts: 20 });
+await Message.deleteMany({ workspaceId: elm.workspace._id });
+const elmSend = (count, daysAgo) => Array.from({ length: count }, (_, index) => ({ kind: "welcome", workspaceId: elm.workspace._id, newsletterId: elm.newsletter._id, email: `e${daysAgo}-${index}@example.com`, status: "sent", sentAt: new Date(Date.now() - daysAgo * DAY - index * 1000) }));
+await Message.insertMany([...elmSend(100, 3), ...elmSend(120, 0)]);
+const flaggedBody = "Your account has been suspended. [Verify your password](https://acme-login.example.net/restore) today.";
+await Campaign.create({
+	workspaceId: acme.workspace._id, newsletterId: acme.newsletter._id, subject: "Action required on your account", format: "markdown", markdown: flaggedBody, status: "draft",
+	review: { status: "pending", hash: contentHash({ subject: "Action required on your account", previewText: "", body: flaggedBody }), reasons: scanContent({ subject: "x", body: flaggedBody }).reasons, requestedAt: new Date(Date.now() - 3600_000) },
+});
+await Workspace.updateOne({ _id: birchWorkspace._id }, { $set: { blockedAt: new Date(), blockReason: "7.0% of the last 7 days' emails bounced (the limit is 5%)" } });
+await BlockedDomain.create({ domain: "spam-source.test", reason: "bulk junk signups" });
 // Things that aren't going out as they should.
 await Campaign.create({ workspaceId: acme.workspace._id, newsletterId: acme.newsletter._id, subject: "Autumn launch", status: "sending", format: "markdown", markdown: "Big news.", startedAt: new Date(Date.now() - 4 * 3600_000) });
 await Campaign.collection.updateOne({ subject: "Autumn launch" }, { $set: { updatedAt: new Date(Date.now() - 3 * 3600_000) } });
@@ -171,6 +186,7 @@ const child = spawn("npx", ["next", "dev", "--webpack", "-p", PORT], {
 		MONGODB_URI: uri,
 		SESSION_SECRET: crypto.randomBytes(32).toString("hex"),
 		ADMIN_EMAIL: "root@demo.test",
+		REQUIRE_ADMIN_2FA: "false",
 		ADMIN_PASSWORD: PASSWORD + "-unused",
 		APP_URL: `http://localhost:${PORT}`,
 		SENDING_ENABLED: "false",
