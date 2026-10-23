@@ -13,6 +13,8 @@ import { connectDb } from "@/lib/db";
 import { toFirstName } from "@/lib/merge-tags";
 import { normalizeEmail } from "@/lib/validation";
 import { CONTACT_LIMIT_MESSAGE, getContactRoomFor } from "@/lib/quota";
+import { MAX_SEGMENTS_PER_NEWSLETTER, readSegment } from "@/lib/segments";
+import { countRules } from "@/lib/segments-server";
 import { requireWorkspace } from "@/lib/workspace";
 import { getSuppressionScope } from "@/lib/workspace-rules";
 import Contact from "@/models/Contact";
@@ -20,6 +22,7 @@ import ContactField from "@/models/ContactField";
 import Event from "@/models/Event";
 import Message from "@/models/Message";
 import Newsletter from "@/models/Newsletter";
+import Segment from "@/models/Segment";
 import Suppression from "@/models/Suppression";
 
 // The newsletter must belong to the signed-in person's workspace; its workspaceId then goes on every contact.
@@ -168,6 +171,57 @@ export async function removeContactField(key) {
 	const { deletedCount } = await ContactField.deleteOne({ workspaceId, key: String(key ?? "") });
 	if (!deletedCount) return { error: "Field not found" };
 	await Contact.updateMany({ workspaceId, [`fields.${key}`]: { $exists: true } }, { $unset: { [`fields.${key}`]: 1 } });
+	revalidatePath("/contacts");
+	return { ok: true };
+}
+
+// --- Saved segments ---
+
+async function readOwnSegment(workspaceId, input) {
+	const newsletter = await findOwnNewsletter(workspaceId, input?.newsletterId);
+	if (!newsletter) return { error: "Newsletter not found" };
+	const parsed = readSegment(input, await listContactFields(workspaceId));
+	return parsed.error ? parsed : { newsletter, segment: parsed };
+}
+
+// How many active contacts the rules pick right now, before saving.
+export async function countSegmentRules(input) {
+	const { workspaceId } = await requireWorkspace();
+	await connectDb();
+	const result = await readOwnSegment(workspaceId, { name: "Preview", ...input });
+	if (result.error) return { error: result.error };
+	return { count: await countRules({ workspaceId, newsletterId: result.newsletter._id, segment: result.segment }) };
+}
+
+// Creates a segment, or changes the one with `id`.
+export async function saveSegment(input) {
+	const { workspaceId } = await requireWorkspace();
+	await connectDb();
+	const result = await readOwnSegment(workspaceId, input);
+	if (result.error) return { error: result.error };
+	const { newsletter, segment } = result;
+
+	if (input.id) {
+		if (!isValidObjectId(input.id)) return { error: "Segment not found" };
+		const { matchedCount } = await Segment.updateOne({ _id: input.id, workspaceId, newsletterId: newsletter._id }, { $set: segment });
+		if (!matchedCount) return { error: "Segment not found" };
+	} else {
+		if ((await Segment.countDocuments({ workspaceId, newsletterId: newsletter._id })) >= MAX_SEGMENTS_PER_NEWSLETTER) {
+			return { error: `A newsletter can have ${MAX_SEGMENTS_PER_NEWSLETTER} segments` };
+		}
+		await Segment.create({ workspaceId, newsletterId: newsletter._id, ...segment });
+	}
+	revalidatePath("/contacts");
+	return { ok: true };
+}
+
+// Issues that were going to this segment are asked to choose again (they won't be sent to everyone).
+export async function removeSegment(id) {
+	const { workspaceId } = await requireWorkspace();
+	if (!isValidObjectId(id)) return { error: "Segment not found" };
+	await connectDb();
+	const { deletedCount } = await Segment.deleteOne({ _id: id, workspaceId });
+	if (!deletedCount) return { error: "Segment not found" };
 	revalidatePath("/contacts");
 	return { ok: true };
 }

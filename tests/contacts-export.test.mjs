@@ -52,8 +52,12 @@ test("a contact with nothing but an email still exports a full line", () => {
 
 test("filters are read from the address and invalid values are dropped", () => {
 	const params = new URLSearchParams({ newsletter: newsletterId, status: "bounced", q: "  Dana@Ex " });
-	assert.deepEqual(readContactFilters(params), { newsletterId, status: "bounced", query: "dana@ex" });
+	assert.deepEqual(readContactFilters(params), { segmentId: null, newsletterId, status: "bounced", query: "dana@ex" });
+	const segmentId = "74f1a2b3c4d5e6f7a8b9c0d8";
+	assert.equal(readContactFilters({ segment: segmentId }).segmentId, segmentId);
+	assert.equal(readContactFilters({ segment: "nope" }).segmentId, null);
 	assert.deepEqual(readContactFilters({ newsletter: "nope", status: "weird", q: 5 }), {
+		segmentId: null,
 		newsletterId: null,
 		status: null,
 		query: "",
@@ -68,4 +72,7 @@ test("the filter matches the email's start only, with regex characters escaped",
 	assert.equal(filter.status, "active");
 	assert.deepEqual(buildContactFilters({ workspaceId, newsletterId: null, status: null, query: "" }).filter, { workspaceId });
 	assert.throws(() => buildContactFilters({ newsletterId, status: null, query: "" }), /workspaceId/, "never unscoped");
+	const withSegment = buildContactFilters({ workspaceId, newsletterId, status: "active", query: "", segmentFilter: { tags: "vip" } });
+	assert.deepEqual(withSegment.filter.$and, [{ tags: "vip" }], "a saved segment narrows the list");
+	assert.equal(buildContactFilters({ workspaceId, newsletterId, status: null, query: "", segmentFilter: {} }).filter.$and, undefined, "an empty segment adds nothing");
 });

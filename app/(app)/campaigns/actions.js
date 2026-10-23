@@ -12,6 +12,7 @@ import { connectDb } from "@/lib/db";
 import { getScheduleProblem } from "@/lib/schedule";
 import { publishScheduledSend } from "@/lib/scheduling";
 import { ReviewError, assertReviewed } from "@/lib/content-review";
+import { SegmentMissingError, getSegmentFilterFor } from "@/lib/segments-server";
 import { getSendPlanPreview, getCleanupPreview, queueCampaign, sendTestEmail, sendToMoreContacts } from "@/lib/sending";
 import { getSendProblem } from "@/lib/sending-rules";
 import { ARCHIVE_SLUG_PATTERN } from "@/lib/slug";
@@ -20,6 +21,7 @@ import { MAX_BODY_BYTES } from "@/lib/validation";
 import { requireWorkspace } from "@/lib/workspace";
 import Campaign from "@/models/Campaign";
 import Newsletter from "@/models/Newsletter";
+import Segment from "@/models/Segment";
 
 const MAX_SUBJECT_LENGTH = 200;
 const COPY_SUFFIX = " (copy)";
@@ -164,8 +166,9 @@ export async function scheduleCampaign(id, { scheduledAt, audienceLimit } = {}) 
 	// Flagged now rather than when the time comes, so the sender hears about it while they can still change it.
 	try {
 		await assertReviewed(campaign);
+		await getSegmentFilterFor(campaign);
 	} catch (error) {
-		if (error instanceof ReviewError) return { error: error.message };
+		if (error instanceof ReviewError || error instanceof SegmentMissingError) return { error: error.message };
 		throw error;
 	}
 
@@ -303,7 +306,7 @@ export async function duplicateCampaign(id) {
 		// A copy of an API draft is still content from the API key's holder, not from the dashboard.
 		...(campaign.source === "api" && { source: "api" }),
 		// The copy goes to the same part of the list and tests the same subjects, but starts the test over.
-		...(campaign.audience?.tag || campaign.audience?.source
+		...(campaign.audience?.tag || campaign.audience?.source || campaign.audience?.segmentId
 			? { audience: normalizeSegment(campaign.audience) }
 			: {}),
 		...(campaign.subjectB && { subjectB: campaign.subjectB }),
@@ -313,12 +316,16 @@ export async function duplicateCampaign(id) {
 }
 
 // Choose who a draft goes to: a tag and/or a signup source. Both empty means everyone.
-export async function setCampaignAudience(id, { tag, source } = {}) {
+export async function setCampaignAudience(id, { tag, source, segmentId } = {}) {
 	const campaign = await findCampaign(id);
 	if (!campaign) return { error: "Campaign not found" };
 	if (campaign.audience?.nonOpenersOf) return { error: "A resend to non-openers has its own audience" };
 
-	const segment = normalizeSegment({ tag, source });
+	const segment = normalizeSegment({ tag, source, segmentId });
+	// A saved segment must be this newsletter's own.
+	if (segment.segmentId && !(await Segment.exists({ _id: segment.segmentId, workspaceId: campaign.workspaceId, newsletterId: campaign.newsletterId }))) {
+		return { error: "Segment not found" };
+	}
 	const { matchedCount } = await Campaign.updateOne(
 		{ _id: campaign._id, status: { $in: EDITABLE_STATUSES } },
 		Object.keys(segment).length > 0 ? { $set: { audience: segment } } : { $unset: { audience: 1 } }
