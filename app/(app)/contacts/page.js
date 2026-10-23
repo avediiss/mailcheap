@@ -9,6 +9,7 @@ import DialogAddContact from "@/components/DialogAddContact";
 import DialogContactFields from "@/components/DialogContactFields";
 import DialogImportContacts from "@/components/DialogImportContacts";
 import DialogSegments from "@/components/DialogSegments";
+import PanelImportProgress from "@/components/PanelImportProgress";
 import FilterContacts from "@/components/FilterContacts";
 import HeaderPage from "@/components/HeaderPage";
 import MenuContact from "@/components/MenuContact";
@@ -28,6 +29,7 @@ import { listContactFields } from "@/lib/contact-fields-server";
 import { buildContactFilters, readContactFilters } from "@/lib/contact-filter";
 import { connectDb } from "@/lib/db";
 import { buildSegmentFilter } from "@/lib/segments";
+import { getImportStatus } from "@/lib/import-jobs";
 import { getSegment, listSegmentsWithCounts } from "@/lib/segments-server";
 import { requireWorkspace } from "@/lib/workspace";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -53,7 +55,8 @@ export default async function ContactsPage({ searchParams }) {
 
 	// Segments belong to one newsletter: shown when one is picked, or when there is only one.
 	const scopeNewsletter = newsletterId ? newsletters.find(({ _id }) => String(_id) === newsletterId) : newsletters.length === 1 ? newsletters[0] : null;
-	const [fieldDefsForSegments, segments, selectedSegment] = await Promise.all([
+	const [importStatus, fieldDefsForSegments, segments, selectedSegment] = await Promise.all([
+		getImportStatus({ workspaceId }),
 		listContactFields(workspaceId),
 		scopeNewsletter ? listSegmentsWithCounts({ workspaceId, newsletterId: scopeNewsletter._id }) : [],
 		segmentId ? getSegment({ workspaceId, segmentId }) : null,
@@ -108,10 +111,11 @@ export default async function ContactsPage({ searchParams }) {
 				</Button>
 				<DialogContactFields fields={fieldDefs} />
 				<DialogAddContact newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
-					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
+					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} fieldDefs={fieldDefsForSegments} />
 			</HeaderPage>
 
 			<div className="flex flex-col gap-4">
+				{importStatus && <PanelImportProgress key={importStatus.id} initial={importStatus} />}
 				<Suspense fallback={<Skeleton className="h-9 w-full rounded-lg" />}>
 					<FilterContacts newsletters={newsletterOptions} />
 				</Suspense>

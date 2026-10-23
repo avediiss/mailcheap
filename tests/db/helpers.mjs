@@ -36,7 +36,7 @@ export async function startDb() {
 }
 
 async function loadModels() {
-	const names = ["Alert", "ApiKey", "AuditLog", "BlockedDomain", "Campaign", "Contact", "ContactField", "Domain", "Event", "Invitation", "Membership", "Message", "Newsletter", "Segment", "Suppression", "User", "Workspace"];
+	const names = ["Alert", "ApiKey", "AuditLog", "BlockedDomain", "Campaign", "Contact", "ContactField", "Domain", "Event", "ImportChunk", "ImportJob", "Invitation", "Membership", "Message", "Newsletter", "Segment", "Suppression", "User", "Workspace"];
 	const loaded = await Promise.all(names.map((name) => import(`@/models/${name}`)));
 	return Object.fromEntries(names.map((name, index) => [name, loaded[index].default]));
 }

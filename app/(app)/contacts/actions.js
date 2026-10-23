@@ -15,6 +15,7 @@ import { normalizeEmail } from "@/lib/validation";
 import { CONTACT_LIMIT_MESSAGE, getContactRoomFor } from "@/lib/quota";
 import { MAX_SEGMENTS_PER_NEWSLETTER, readSegment } from "@/lib/segments";
 import { countRules } from "@/lib/segments-server";
+import { finishImportUpload, getImportStatus, saveImportChunk, startImportJob } from "@/lib/import-jobs";
 import { requireWorkspace } from "@/lib/workspace";
 import { getSuppressionScope } from "@/lib/workspace-rules";
 import Contact from "@/models/Contact";
@@ -224,4 +225,47 @@ export async function removeSegment(id) {
 	if (!deletedCount) return { error: "Segment not found" };
 	revalidatePath("/contacts");
 	return { ok: true };
+}
+
+// --- Big imports: uploaded in parts, added by a background job (lib/import-jobs.js) ---
+
+// newFields: columns the person chose to keep as new text fields: [{ header, label }]. Returns the keys they got.
+export async function startImport({ newsletterId, fileName, totalRows, newFields = [] }) {
+	const { workspaceId, session } = await requireWorkspace();
+	await connectDb();
+	if (!Array.isArray(newFields) || newFields.length > 10) return { error: "Too many new fields at once" };
+
+	const existing = await listContactFields(workspaceId);
+	const created = [];
+	const keys = existing.map(({ key }) => key);
+	for (const { header, label } of newFields) {
+		const definition = readFieldDefinition({ label, type: "text" }, keys);
+		if (definition.error) return { error: `${label}: ${definition.error}` };
+		keys.push(definition.key);
+		created.push({ header, ...definition });
+	}
+	const started = await startImportJob({ workspaceId, userId: session.userId, newsletterId, fileName, totalRows });
+	if (started.error) return started;
+	// Only once the import can start: a refused one leaves no fields behind.
+	if (created.length > 0) await ContactField.insertMany(created.map(({ key, label, type }) => ({ workspaceId, key, label, type })), { ordered: false });
+	revalidatePath("/contacts");
+	return { ok: true, jobId: started.jobId, chunkRows: started.chunkRows, fields: created.map(({ header, key }) => ({ header, key })) };
+}
+
+export async function uploadImportChunk({ jobId, index, rows }) {
+	const { workspaceId } = await requireWorkspace();
+	return saveImportChunk({ workspaceId, jobId, index, rows });
+}
+
+export async function finishImport(jobId) {
+	const { workspaceId } = await requireWorkspace();
+	const result = await finishImportUpload({ workspaceId, jobId });
+	revalidatePath("/contacts");
+	return result;
+}
+
+// The import running now, or the last one finished in the past day.
+export async function getImportProgress() {
+	const { workspaceId } = await requireWorkspace();
+	return getImportStatus({ workspaceId });
 }
