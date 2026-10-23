@@ -88,7 +88,10 @@ export async function setWorkspaceStatus(id, status) {
 	const session = await requirePlatformAdmin();
 	if (!isValidObjectId(id) || !["active", "suspended"].includes(status)) return { error: "Workspace not found" };
 	await connectDb();
-	const { matchedCount } = await Workspace.updateOne({ _id: id }, { $set: { status } });
+	// Resuming also clears an automatic block and starts counting bounces and complaints again from now, so the
+	// emails that caused it don't block the workspace again at once.
+	const update = status === "active" ? { $set: { status, healthResetAt: new Date() }, $unset: { blockedAt: 1, blockReason: 1 } } : { $set: { status } };
+	const { matchedCount } = await Workspace.updateOne({ _id: id }, update);
 	if (!matchedCount) return { error: "Workspace not found" };
 	await recordAudit({ actor: session, workspaceId: id, action: status === "suspended" ? "workspace.suspended" : "workspace.resumed" });
 	revalidatePath("/", "layout");

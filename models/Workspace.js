@@ -13,6 +13,11 @@ const workspaceSchema = new mongoose.Schema(
 		// Suspended: can't send or take API signups. The platform owner can still read it.
 		status: { type: String, enum: WORKSPACE_STATUSES, default: "active" },
 		limits: { contacts: limit, emailsPerMonth: limit, newsletters: limit },
+		// Blocked by the platform's own checks (lib/workspace-health-server.js): why and when. Resuming clears it and
+		// starts the bounce and complaint count again from that moment.
+		blockedAt: { type: Date },
+		blockReason: { type: String, trim: true, maxlength: 300 },
+		healthResetAt: { type: Date },
 	},
 	{ timestamps: true }
 );
