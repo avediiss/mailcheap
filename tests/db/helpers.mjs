@@ -9,6 +9,8 @@ process.env.SENDING_ENABLED = "true";
 process.env.ALERT_FROM ||= "Namag <alerts@platform.test>";
 // Most tests are about something else and use administrators without a second factor; two-factor.test.mjs turns this back on.
 process.env.REQUIRE_ADMIN_2FA = "false";
+// Tests never reach the real DNS: the address checks that need it are switched off here and tested with a fake resolver.
+process.env.ADDRESS_CHECK_DNS = "off";
 
 // Everything is imported after MONGODB_URI is set, with the same "@/" paths the app uses.
 export async function startDb() {
@@ -33,7 +35,7 @@ export async function startDb() {
 }
 
 async function loadModels() {
-	const names = ["Alert", "ApiKey", "AuditLog", "Campaign", "Contact", "Domain", "Event", "Invitation", "Membership", "Message", "Newsletter", "Suppression", "User", "Workspace"];
+	const names = ["Alert", "ApiKey", "AuditLog", "BlockedDomain", "Campaign", "Contact", "Domain", "Event", "Invitation", "Membership", "Message", "Newsletter", "Suppression", "User", "Workspace"];
 	const loaded = await Promise.all(names.map((name) => import(`@/models/${name}`)));
 	return Object.fromEntries(names.map((name, index) => [name, loaded[index].default]));
 }

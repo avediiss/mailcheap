@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { sendAlert } from "@/lib/alerts";
 import { authenticateRequest } from "@/lib/api-keys";
 import { isSendingEnabled } from "@/lib/config";
+import { AddressError } from "@/lib/address-check";
 import { upsertContact } from "@/lib/contacts";
 import { QuotaError } from "@/lib/quota";
 import { normalizeTags } from "@/lib/csv-import";
@@ -94,6 +95,9 @@ export async function POST(request) {
 		});
 	} catch (error) {
 		if (error instanceof QuotaError) return fail(403, error.message);
+		if (error instanceof AddressError) {
+			return NextResponse.json({ error: error.message, reason: error.reason, ...(error.suggestion && { suggestion: error.suggestion }) }, { status: 422 });
+		}
 		throw error;
 	}
 	const { contact, created } = outcome;

@@ -79,7 +79,7 @@ export default function DialogImportContacts({ newsletters, defaultNewsletterId 
 
 	function runImport() {
 		startImporting(async () => {
-			const totals = { created: 0, existing: 0, invalid: 0, skippedOverLimit: 0 };
+			const totals = { created: 0, existing: 0, invalid: 0, skippedOverLimit: 0, rejected: { typo: 0, disposable: 0, blocked: 0, undeliverable: 0 } };
 			for (let start = 0; start < rows.length; start += MAX_IMPORT_ROWS_PER_REQUEST) {
 				setProgress(start / rows.length);
 				const result = await importContacts({
@@ -94,6 +94,7 @@ export default function DialogImportContacts({ newsletters, defaultNewsletterId 
 				totals.existing += result.existing;
 				totals.invalid += result.invalid;
 				totals.skippedOverLimit += result.skippedOverLimit ?? 0;
+				for (const reason of Object.keys(totals.rejected)) totals.rejected[reason] += result.rejected?.[reason] ?? 0;
 			}
 			setProgress(1);
 			toast.success(`${formatNumber(totals.created)} added, ${formatNumber(totals.existing)} already there`);
@@ -104,6 +105,9 @@ export default function DialogImportContacts({ newsletters, defaultNewsletterId 
 					{ duration: 12000 }
 				);
 			}
+			// Addresses left out because they are typos, throwaway inboxes or can't receive mail: say how many and why.
+			const left = describeRejected(totals.rejected);
+			if (left) toast.info(left, { duration: 12000 });
 			setIsOpen(false);
 			reset();
 			router.refresh();
@@ -218,4 +222,16 @@ export default function DialogImportContacts({ newsletters, defaultNewsletterId 
 			</DialogContent>
 		</Dialog>
 	);
+}
+
+// "12 not added: 5 typos, 4 temporary inboxes, 3 on domains that can't receive email." or "" when none.
+function describeRejected({ typo, disposable, blocked, undeliverable }) {
+	const parts = [
+		typo && `${formatNumber(typo)} ${typo === 1 ? "typo" : "typos"} (like gmial.com)`,
+		disposable && `${formatNumber(disposable)} temporary ${disposable === 1 ? "inbox" : "inboxes"}`,
+		blocked && `${formatNumber(blocked)} on blocked domains`,
+		undeliverable && `${formatNumber(undeliverable)} on domains that can't receive email`,
+	].filter(Boolean);
+	const total = typo + disposable + blocked + undeliverable;
+	return total ? `${formatNumber(total)} not added: ${parts.join(", ")}.` : "";
 }

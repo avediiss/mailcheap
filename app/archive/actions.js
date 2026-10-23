@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import { sendAlert } from "@/lib/alerts";
 import { isSendingEnabled } from "@/lib/config";
+import { AddressError } from "@/lib/address-check";
 import { upsertContact } from "@/lib/contacts";
 import { connectDb } from "@/lib/db";
 import { getInbox } from "@/lib/inbox-links";
@@ -68,6 +69,8 @@ export async function subscribe(_state, formData) {
 	} catch (error) {
 		// A full workspace: the visitor isn't told why, only that signups are closed for now.
 		if (error instanceof QuotaError) return { error: "This newsletter is not taking signups right now" };
+		// A typo or a throwaway address: the visitor can fix it, so they're told how.
+		if (error instanceof AddressError) return { error: error.message };
 		throw error;
 	}
 	const { contact, created } = outcome;
