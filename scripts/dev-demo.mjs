@@ -15,6 +15,9 @@ import { createInviteToken, getInviteExpiry } from "../lib/invitation-rules.js";
 import BlockedDomain from "../models/BlockedDomain.js";
 import Campaign from "../models/Campaign.js";
 import Contact from "../models/Contact.js";
+import ContactField from "../models/ContactField.js";
+import ImportJob from "../models/ImportJob.js";
+import Segment from "../models/Segment.js";
 import Domain from "../models/Domain.js";
 import Invitation from "../models/Invitation.js";
 import Membership from "../models/Membership.js";
@@ -118,6 +121,21 @@ await Message.insertMany(Array.from({ length: 30 }, (_, index) => ({ kind: "welc
 const startOfMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
 const acmeThisMonth = await Message.countDocuments({ workspaceId: acme.workspace._id, sentAt: { $gte: startOfMonth } });
 await Workspace.updateOne({ _id: acme.workspace._id }, { $set: { limits: { contacts: 40, emailsPerMonth: Math.max(Math.round(acmeThisMonth / 0.85), 20), newsletters: 3 } } });
+// Custom fields on Acme's contacts, two saved segments, and a finished background import.
+await ContactField.insertMany([
+	{ workspaceId: acme.workspace._id, key: "plan", label: "Plan", type: "text" },
+	{ workspaceId: acme.workspace._id, key: "seats", label: "Seats", type: "number" },
+	{ workspaceId: acme.workspace._id, key: "renews", label: "Renewal date", type: "date" },
+]);
+const acmeContacts = await Contact.find({ workspaceId: acme.workspace._id }).sort({ _id: 1 });
+for (const [index, contact] of acmeContacts.entries()) {
+	await Contact.updateOne({ _id: contact._id }, { $set: { fields: { plan: ["Free", "Pro", "Team"][index % 3], seats: 1 + (index % 9) * 4, renews: new Date(Date.now() + (index % 12) * 4 * DAY).toISOString().slice(0, 10) }, ...(index % 3 === 1 && { tags: ["vip"] }) } });
+}
+await Segment.insertMany([
+	{ workspaceId: acme.workspace._id, newsletterId: acme.newsletter._id, name: "Pro and Team", match: "any", conditions: [{ field: "field:plan", op: "is", value: "Pro" }, { field: "field:plan", op: "is", value: "Team" }] },
+	{ workspaceId: acme.workspace._id, newsletterId: acme.newsletter._id, name: "Renewing this month", match: "all", conditions: [{ field: "field:renews", op: "inNext", value: 30 }, { field: "tag", op: "has", value: "vip" }] },
+]);
+await ImportJob.create({ workspaceId: acme.workspace._id, newsletterId: acme.newsletter._id, fileName: "mailchimp-export.csv", status: "done", totalRows: 18240, chunkCount: 37, uploadedChunks: 37, processedChunks: 37, processedRows: 18240, created: 17108, existing: 612, invalid: 14, skippedOverLimit: 0, rejected: { typo: 163, disposable: 301, blocked: 0, undeliverable: 42 }, finishedAt: new Date() });
 // A new sender in its fourth day of warm-up, a flagged issue waiting for review, a blocked workspace and a blocked domain.
 const elm = await tenant({ name: "Elm Collective", slug: "elm", domain: "elm.test", owner: await user("owner@elm.test", "Elm Owner"), newsletterName: "Elm Letters", contacts: 20 });
 await Message.deleteMany({ workspaceId: elm.workspace._id });

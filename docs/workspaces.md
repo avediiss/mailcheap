@@ -179,6 +179,34 @@ a platform administrator can see and change it from the client's page in the con
   (capitals, repeated `!`, "100% free", fake `Re:`, link shorteners) show as tips in the pre-send checks and never block.
   This is the one place an administrator reads a client's email, and only what was flagged; it is audited.
 
+### Contacts (Phase B)
+
+- **Custom fields.** A workspace defines up to 25 fields (text, number or date) under **Contacts → Fields**. A field is
+  a merge tag: `{{plan}}` or `{{plan|your plan}}` in a subject or an email prints the contact's value (numbers with
+  separators, dates written out), the fallback when there is none, or nothing. First name keeps working as before
+  (`{{first_name}}`, falling back to "there"). A tag that is neither first name nor a defined field is left exactly as
+  written, and the editor warns about it. Values are set in a contact's Edit dialog, by import columns, or by the API
+  (`POST /api/v1/contacts` takes `fields`; an unknown field or a value that doesn't fit is a 400; a signup for someone
+  already on the list only fills fields they had no value for). The export has a column per field. Removing a field
+  removes its value from every contact.
+- **A page per contact** (`/contacts/<id>`): status, source, dates, tags, fields, emails sent/opened/clicked and a
+  newest-first activity list built from their messages (sent, delivered, opened, clicked, bounced, spam, failed) and
+  when they joined, confirmed or left. Found only inside the signed-in workspace.
+- **Saved segments.** Rules joined by *all* or *any* (up to 8, 20 segments per newsletter): tag, signup source, email
+  address, first name, when they joined, last opened or clicked (in or not in the last N days, or never), issues in a row
+  without a sign of life, emails received, opens, and any custom field (for dates, "in the next N days" finds upcoming
+  renewals). A segment is a question: who is in it is worked out each time, so people join and leave on their own.
+  Counts show live in the builder and on the contacts page; the list and the export can be filtered by one; an issue
+  can be sent to one from its "To" menu. If the segment is deleted the issue asks to choose again: it is never sent to
+  everyone instead. An unreadable rule matches nobody.
+- **Big imports.** The import dialog shows a preview and lets you match columns (email, name, status, joined date,
+  tags, each custom field) and keep other columns as new fields. Up to 1,000 rows without new fields is added right
+  away; anything bigger (up to 250,000 rows) is uploaded in parts of 500 and added by a background job
+  (`/api/jobs/import`, signed by QStash; without QStash, as in local development, it runs in the same process). The
+  window can be closed: the contacts page shows progress and the result, and the owners get an email. One import at a
+  time per workspace. Every part goes through the same address checks and contact limit as any signup. A part that went
+  missing fails the import with a reason instead of adding around the hole.
+
 ### Limits (all optional; empty means none)
 
 | Limit | What it counts | What happens at the limit |

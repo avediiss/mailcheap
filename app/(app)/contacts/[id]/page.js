@@ -112,6 +112,7 @@ export default async function ContactPage({ params }) {
 									<dd className="truncate font-medium tabular-nums">{value}</dd>
 								</div>
 							))}
+							{details.length % 2 === 1 && <div className="hidden bg-card sm:block" aria-hidden="true" />}
 							{contact.tags?.length > 0 && (
 								<div className="flex flex-wrap items-center justify-between gap-2 bg-card px-4 py-2.5 text-sm sm:col-span-2">
 									<dt className="text-muted-foreground">Tags</dt>
@@ -148,6 +149,7 @@ export default async function ContactPage({ params }) {
 										<dd className="truncate font-medium">{formatFieldValue(contact.fields?.[key]) || <span className="text-muted-foreground">—</span>}</dd>
 									</div>
 								))}
+								{fieldDefs.length % 2 === 1 && <div className="hidden bg-card sm:block" aria-hidden="true" />}
 							</dl>
 						</div>
 					</section>
