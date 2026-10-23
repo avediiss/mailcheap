@@ -154,7 +154,9 @@ export default async function ContactsPage({ searchParams }) {
 													gravatarHash={gravatarHash(contact.email)}
 													size={26}
 												/>
-												<span className="truncate">{contact.email}</span>
+												<Link href={`/contacts/${contact._id.toString()}`} className="truncate hover:underline">
+													{contact.email}
+												</Link>
 												{contact.firstName && (
 													<span className="hidden shrink-0 text-muted-foreground sm:inline">{contact.firstName}</span>
 												)}
