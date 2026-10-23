@@ -46,9 +46,10 @@ export default async function WorkspacesPage() {
 									<span className="truncate font-medium">{row.name}</span>
 									<span className="text-xs text-muted-foreground">
 										{formatNumber(row.members)} {row.members === 1 ? "person" : "people"} · {formatNumber(row.newsletters)} {row.newsletters === 1 ? "newsletter" : "newsletters"}
+										{row.isWarmingUp && row.lastSentAt ? ` · warming up, day ${row.warmupDay}` : ""}
 									</span>
 								</span>
-								{row.status === "suspended" && <BadgeStatus status="paused" label="Suspended" />}
+								{row.status === "suspended" && <BadgeStatus status="paused" label={row.blockReason ? "Blocked" : "Suspended"} />}
 							</Link>
 							<MeterUsage label="Contacts" meter={row.contactsMeter} compact />
 							<MeterUsage label="Emails this month" meter={row.emailsMeter} compact />
@@ -92,9 +93,12 @@ export default async function WorkspacesPage() {
 											<span className="flex min-w-0 flex-col">
 												<span className="flex items-center gap-2 truncate font-medium">
 													{row.name}
-													{row.status === "suspended" && <BadgeStatus status="paused" label="Suspended" />}
+													{row.status === "suspended" && <BadgeStatus status="paused" label={row.blockReason ? "Blocked" : "Suspended"} />}
 												</span>
-												<span className="truncate text-xs text-muted-foreground">{formatNumber(row.newsletters)} {row.newsletters === 1 ? "newsletter" : "newsletters"}</span>
+												<span className="truncate text-xs text-muted-foreground">
+													{formatNumber(row.newsletters)} {row.newsletters === 1 ? "newsletter" : "newsletters"}
+													{row.isWarmingUp && row.lastSentAt ? ` · warming up, day ${row.warmupDay}` : ""}
+												</span>
 											</span>
 										</Link>
 									</TableCell>

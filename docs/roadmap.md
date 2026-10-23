@@ -13,7 +13,7 @@ two-factor login, A/B subject tests, a welcome series, resend to non-openers, li
 
 ## Phases
 
-### A. Safe sending (all clients share one SES account)
+### A. Safe sending (all clients share one SES account): built, see docs/workspaces.md
 - **Match:** warm-up (small daily volume that grows with a clean record), first sends to new contacts go to a small
   slice and the rest follows 3 hours later if it looks healthy, account block at 5% bounces / 0.3% complaints
   (campaign pause at 2% / 0.08%), filters for typo, disposable and dead domains at signup and import, content scan

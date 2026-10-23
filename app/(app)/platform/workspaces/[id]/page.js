@@ -1,4 +1,4 @@
-import { isValidObjectId } from "mongoose";
+import { Types, isValidObjectId } from "mongoose";
 import { notFound } from "next/navigation";
 import AvatarInitials from "@/components/AvatarInitials";
 import BadgeHealth from "@/components/BadgeHealth";
@@ -6,6 +6,7 @@ import BadgeStatus from "@/components/BadgeStatus";
 import ButtonWorkspaceStatus from "@/components/ButtonWorkspaceStatus";
 import ChartDaily from "@/components/ChartDaily";
 import FormAssignDomain from "@/components/FormAssignDomain";
+import FormSending from "@/components/FormSending";
 import FormWorkspaceSettings from "@/components/FormWorkspaceSettings";
 import HeaderPage from "@/components/HeaderPage";
 import ListAudit from "@/components/ListAudit";
@@ -17,6 +18,10 @@ import { roleLabel } from "@/lib/roles";
 import { listInvitations, listMembers } from "@/lib/members";
 import { getWorkspaceDetail } from "@/lib/platform";
 import { getPlatformInsights } from "@/lib/platform-insights";
+import { loadSendState } from "@/lib/send-plan-server";
+import { getAccountBlockReason } from "@/lib/workspace-health";
+import { getHealthTotals } from "@/lib/workspace-health-server";
+import Workspace from "@/models/Workspace";
 import { formatCost } from "@/lib/send-cost";
 
 export const metadata = { title: "Workspace" };
@@ -39,6 +44,11 @@ export default async function WorkspaceDetailPage({ params }) {
 		getPlatformInsights({ range: 30, names: new Map([[id, summary.name]]), workspaceId: id }),
 	]);
 	const projection = summary.emailsProjection;
+	const [sending, health, own] = await Promise.all([
+		loadSendState(id),
+		getHealthTotals({ workspaceId: new Types.ObjectId(id) }),
+		Workspace.findById(id).select({ sendingTrust: 1, blockReason: 1 }).lean(),
+	]);
 
 	return (
 		<>
@@ -107,6 +117,31 @@ export default async function WorkspaceDetailPage({ params }) {
 							</dd>
 						</div>
 					</dl>
+				</Section>
+
+				<Section title="Sending speed" stagger={2}>
+					{summary.blockReason && (
+						<p className="border-b border-border/60 bg-red-500/10 px-4 py-3 text-sm text-pretty text-red-700 sm:px-5 dark:text-red-300">
+							Blocked automatically: {summary.blockReason}. Resume it from the button above once you have looked into it.
+						</p>
+					)}
+					<dl className="grid grid-cols-2 gap-px bg-border/60 sm:grid-cols-4">
+						{[
+							["Warm-up", sending.isTrusted ? "Trusted" : sending.cap === own?.sendingTrust?.dailyCap ? "Set by you" : `Day ${Math.min(sending.warmupDay, 31)} of 30`],
+							["Daily allowance", Number.isFinite(sending.cap) ? formatNumber(sending.cap) : "No limit"],
+							["Sent today", formatNumber(sending.sentToday)],
+							["Last 7 days", `${formatNumber(health.bounced)} bounced · ${formatNumber(health.complained)} spam`],
+						].map(([label, value]) => (
+							<div key={label} className="flex flex-col gap-1 bg-card px-4 py-3">
+								<dt className="text-xs text-muted-foreground">{label}</dt>
+								<dd className="text-sm font-semibold tabular-nums">{value}</dd>
+							</div>
+						))}
+					</dl>
+					{getAccountBlockReason(health) === null && health.sent > 0 && (
+						<p className="border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground sm:px-5">{formatNumber(health.sent)} emails in the last 7 days. The account is blocked at 5% bounces or 0.3% spam complaints.</p>
+					)}
+					<FormSending id={summary.id} isTrusted={Boolean(own?.sendingTrust?.isTrusted)} dailyCap={own?.sendingTrust?.dailyCap} />
 				</Section>
 
 				<Section title="Settings and limits" stagger={2}>

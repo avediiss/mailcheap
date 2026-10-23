@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { ChevronRight, Newspaper, Settings2, TriangleAlert } from "lucide-react";
 import ButtonNewCampaign from "@/components/ButtonNewCampaign";
+import CardSending from "@/components/CardSending";
 import CardStat from "@/components/CardStat";
 import CardUsage from "@/components/CardUsage";
 import ChartSends from "@/components/ChartSends";
@@ -83,6 +84,9 @@ export default async function OverviewPage({ searchParams }) {
 			</header>
 
 			<div className="flex flex-col gap-8">
+				<Suspense fallback={null}>
+					<CardSending workspaceId={workspaceId} />
+				</Suspense>
 				{selected ? (
 					<>
 						<Section title={`Last ${PERIOD_DAYS} days`} stagger={1}>

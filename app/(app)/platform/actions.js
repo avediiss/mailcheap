@@ -7,12 +7,15 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
 import { addWorkspaceDomain } from "@/lib/domains";
 import { inviteMember } from "@/lib/members";
+import { clearAddressCaches } from "@/lib/address-check";
 import { decideReview } from "@/lib/content-review";
+import { getDomainProblem, normalizeDomain } from "@/lib/domain-rules";
 import { resetTwoFactor } from "@/lib/two-factor";
 import { sendAccountReset, setAccountDisabled, signOutAccount } from "@/lib/platform-accounts";
 import { invitePlatformAdmin, removePlatformAdmin, revokePlatformInvitation } from "@/lib/platform-team";
 import { readLimits, slugifyWorkspaceName } from "@/lib/platform-rules";
 import { normalizeEmail } from "@/lib/validation";
+import BlockedDomain from "@/models/BlockedDomain";
 import Workspace from "@/models/Workspace";
 
 const MAX_NAME_LENGTH = 80;
@@ -178,4 +181,56 @@ export async function decideReviewAction(campaignId, decision, note) {
 	const result = await decideReview({ actor: session, campaignId, decision, note });
 	revalidatePath("/platform", "layout");
 	return result;
+}
+
+// --- How fast a workspace may send ---
+
+// Trusted: no warm-up and no daily amount (a client who arrives with a proven list). Or a daily amount of your own.
+export async function updateSendingAction(_state, formData) {
+	const session = await requirePlatformAdmin();
+	const id = readText(formData, "id");
+	if (!isValidObjectId(id)) return { error: "Workspace not found" };
+	const capText = readText(formData, "dailyCap").replaceAll(",", "");
+	if (capText && !/^[1-9]\d{0,8}$/.test(capText)) return { error: "The daily amount is a whole number, or empty to follow the warm-up" };
+	const isTrusted = formData.get("isTrusted") === "on";
+
+	await connectDb();
+	const update = { $set: { "sendingTrust.isTrusted": isTrusted }, ...(capText ? {} : { $unset: { "sendingTrust.dailyCap": 1 } }) };
+	if (capText) update.$set["sendingTrust.dailyCap"] = Number(capText);
+	const { matchedCount } = await Workspace.updateOne({ _id: id }, update);
+	if (!matchedCount) return { error: "Workspace not found" };
+	await recordAudit({ actor: session, workspaceId: id, action: "workspace.sending", detail: { isTrusted, dailyCap: capText ? Number(capText) : null } });
+	revalidatePath("/platform", "layout");
+	return { ok: true };
+}
+
+// --- Domains the platform refuses at signup and import ---
+
+export async function addBlockedDomainAction(_state, formData) {
+	const session = await requirePlatformAdmin();
+	const domain = String(normalizeDomain(readText(formData, "domain")) ?? "");
+	const problem = getDomainProblem(domain);
+	if (problem) return { error: problem };
+	await connectDb();
+	try {
+		await BlockedDomain.create({ domain, reason: readText(formData, "reason").slice(0, 200), addedBy: session.userId });
+	} catch (error) {
+		if (error?.code === 11000) return { error: `${domain} is already blocked` };
+		throw error;
+	}
+	clearAddressCaches();
+	await recordAudit({ actor: session, action: "blocklist.added", detail: { domain } });
+	revalidatePath("/platform/domains");
+	return { ok: true, domain };
+}
+
+export async function removeBlockedDomainAction(domain) {
+	const session = await requirePlatformAdmin();
+	await connectDb();
+	const { deletedCount } = await BlockedDomain.deleteOne({ domain: String(domain ?? "").toLowerCase() });
+	if (!deletedCount) return { error: "That domain isn't blocked" };
+	clearAddressCaches();
+	await recordAudit({ actor: session, action: "blocklist.removed", detail: { domain } });
+	revalidatePath("/platform/domains");
+	return { ok: true };
 }
