@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
-import { sendCampaign } from "@/app/(app)/campaigns/actions";
+import { previewSendPlan, sendCampaign } from "@/app/(app)/campaigns/actions";
 import InputAudienceLimit, { countRecipients } from "@/components/InputAudienceLimit";
 import ListCleanupPreview from "@/components/ListCleanupPreview";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ export default function DialogSendCampaign({
 	const [limit, setLimit] = useState("");
 	const [isSending, startSending] = useTransition();
 	const { preview, isCounting, loadPreview } = useCleanupPreview(campaignId);
+	// How it will go out, for a sender whose daily amount is still growing or who is mailing many new people.
+	const [planNotes, setPlanNotes] = useState([]);
 	// With the list cleanup on, cold contacts get the last-chance email instead and don't count.
 	const summary = preview?.enabled ? summarizePreview(preview, Number.parseInt(limit, 10)) : null;
 	const issueAudience = preview?.enabled ? preview.issue : audienceCount;
@@ -43,6 +45,7 @@ export default function DialogSendCampaign({
 
 	function changeOpen(nextIsOpen) {
 		if (nextIsOpen && isCleanupEnabled) loadPreview();
+		if (nextIsOpen) previewSendPlan(campaignId).then((plan) => setPlanNotes(plan?.notes ?? []));
 		setIsOpen(nextIsOpen);
 	}
 
@@ -53,6 +56,7 @@ export default function DialogSendCampaign({
 			if (result?.error) return toast.error(result.error);
 			setIsOpen(false);
 			toast.success("Sending started");
+			for (const note of result.notes ?? []) toast.info(note, { duration: 15000 });
 			router.refresh();
 		});
 	}
@@ -92,6 +96,13 @@ export default function DialogSendCampaign({
 					</DialogDescription>
 				</DialogHeader>
 				<InputAudienceLimit value={limit} onChange={setLimit} audienceCount={issueAudience} />
+				{planNotes.length > 0 && (
+					<ul className="flex flex-col gap-1.5 rounded-lg bg-muted/60 px-3 py-2.5 text-xs text-pretty text-muted-foreground">
+						{planNotes.map((note) => (
+							<li key={note}>{note}</li>
+						))}
+					</ul>
+				)}
 				{isCleanupEnabled && <ListCleanupPreview summary={summary} isCounting={isCounting} error={preview?.error} />}
 				<DialogFooter>
 					<DialogClose asChild>

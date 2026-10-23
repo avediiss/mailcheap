@@ -18,6 +18,8 @@ const campaignSchema = new mongoose.Schema(
 		status: { type: String, enum: CAMPAIGN_STATUSES, default: "draft" },
 		// Warm-up: send to the most engaged contacts first, capped at audienceLimit.
 		audienceLimit: { type: Number, min: 1 },
+		// What the platform told the sender about how this went out: spread over days, a slice sent first.
+		sendNotes: [{ type: String }],
 		// Who it goes to: all active contacts, or only a tag and/or signup source, or only the people who
 		// didn't open an earlier campaign (lib/audience.js, lib/non-openers.js).
 		audience: {

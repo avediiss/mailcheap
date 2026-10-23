@@ -138,6 +138,14 @@ export default function CampaignReport({
 					</div>
 				)}
 
+				{campaign.sendNotes?.length > 0 && (
+					<ul className="flex flex-col gap-1 rounded-xl bg-muted/50 px-4 py-3 text-sm text-pretty text-muted-foreground animate-enter">
+						{campaign.sendNotes.map((note) => (
+							<li key={note}>{note}</li>
+						))}
+					</ul>
+				)}
+
 				{resendOrigin && (
 					<p className="text-sm text-muted-foreground animate-enter">
 						Sent to the people who didn’t open{" "}

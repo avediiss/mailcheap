@@ -4,6 +4,7 @@ process.env.SESSION_SECRET ||= "s".repeat(40);
 process.env.APP_URL ||= "https://mailcheap.test";
 process.env.ADMIN_EMAIL ||= "owner@platform.test";
 process.env.ADMIN_PASSWORD ||= "platform owner password";
+process.env.QSTASH_TOKEN ||= "test-qstash-token";
 // Sending is on so the real send path runs; the SES call itself is a recorder (stubs/ses.mjs).
 process.env.SENDING_ENABLED = "true";
 process.env.ALERT_FROM ||= "Namag <alerts@platform.test>";
@@ -47,6 +48,7 @@ export function resetRequest() {
 	globalThis.__sesIdentities = new Set();
 	globalThis.__sesBehavior = undefined;
 	globalThis.__sesDomains = [];
+	globalThis.__qstashCalls = [];
 }
 
 export async function loginAs(user) {
