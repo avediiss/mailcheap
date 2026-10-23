@@ -15,7 +15,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export default function MenuContact({ id, email, status, firstName, tags }) {
+export default function MenuContact({ id, email, status, firstName, tags, fieldDefs, fieldValues }) {
 	const [isPending, startTransition] = useTransition();
 	const [isEditOpen, setIsEditOpen] = useState(false);
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -66,6 +66,8 @@ export default function MenuContact({ id, email, status, firstName, tags }) {
 					email={email}
 					firstName={firstName}
 					tags={tags}
+					fieldDefs={fieldDefs}
+					fieldValues={fieldValues}
 					isOpen
 					onOpenChange={setIsEditOpen}
 				/>

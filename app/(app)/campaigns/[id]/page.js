@@ -4,6 +4,7 @@ import CampaignReport from "@/components/CampaignReport";
 import FormCampaign from "@/components/FormCampaign";
 import { getAbVerdict, isAbTest, summarizeVariants } from "@/lib/ab-test";
 import { getArchiveUrls } from "@/lib/archive-hosts";
+import { listContactFields } from "@/lib/contact-fields-server";
 import { countAudience, getResendOrigin, getSegmentOptions, getVariantRows } from "@/lib/campaign-audience";
 import { sendTimesPipeline } from "@/lib/campaign-queries";
 import { isSendingEnabled } from "@/lib/config";
@@ -69,6 +70,7 @@ export default async function CampaignPage({ params }) {
 
 	return (
 		<FormCampaign
+			fieldKeys={(await listContactFields(workspaceId)).map(({ key }) => key)}
 			campaign={serialize(campaign)}
 			newsletter={serialize(newsletter)}
 			audienceCount={audienceCount}

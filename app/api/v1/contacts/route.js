@@ -3,6 +3,8 @@ import { sendAlert } from "@/lib/alerts";
 import { authenticateRequest } from "@/lib/api-keys";
 import { isSendingEnabled } from "@/lib/config";
 import { AddressError } from "@/lib/address-check";
+import { listContactFields } from "@/lib/contact-fields-server";
+import { readFieldValues } from "@/lib/contact-fields";
 import { upsertContact } from "@/lib/contacts";
 import { QuotaError } from "@/lib/quota";
 import { normalizeTags } from "@/lib/csv-import";
@@ -29,7 +31,7 @@ function fail(status, error) {
 
 function readInput(body) {
 	if (!isPlainObject(body)) return { error: "Send a JSON object" };
-	const { newsletter, email, source, resubscribe, ip, firstName, tags } = body;
+	const { newsletter, email, source, resubscribe, ip, firstName, tags, fields } = body;
 	if (typeof newsletter !== "string" || !newsletter.trim()) return { error: "newsletter is required" };
 
 	const normalizedEmail = normalizeEmail(email);
@@ -44,7 +46,9 @@ function readInput(body) {
 	if (tags !== undefined && (!Array.isArray(tags) || tags.some((tag) => typeof tag !== "string"))) {
 		return { error: "tags must be an array of strings" };
 	}
+	if (fields !== undefined && !isPlainObject(fields)) return { error: "fields must be an object of field values" };
 	return {
+		fields,
 		slug: newsletter.trim().toLowerCase(),
 		email: normalizedEmail,
 		source: source?.trim() || "api",
@@ -83,6 +87,10 @@ export async function POST(request) {
 	const newsletter = await Newsletter.findOne({ slug: input.slug, workspaceId: apiKey.workspaceId }).lean();
 	if (!newsletter) return fail(404, "Newsletter not found");
 
+	// Values for the workspace's custom fields; a field it hasn't defined is an error, so a typo is noticed.
+	const parsedFields = readFieldValues(await listContactFields(apiKey.workspaceId), input.fields);
+	if (parsedFields.error) return fail(400, parsedFields.error);
+
 	let outcome;
 	try {
 		outcome = await upsertContact({
@@ -92,6 +100,7 @@ export async function POST(request) {
 			resubscribe: input.resubscribe,
 			firstName: input.firstName,
 			tags: input.tags,
+			fields: parsedFields.values,
 		});
 	} catch (error) {
 		if (error instanceof QuotaError) return fail(403, error.message);

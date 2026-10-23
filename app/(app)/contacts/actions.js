@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { withEngagement } from "@/lib/cleanup";
 import { getErasedEmail, getSuppressionReasonOnDelete } from "@/lib/contact-delete";
 import { checkAddress } from "@/lib/address-check";
+import { listContactFields } from "@/lib/contact-fields-server";
+import { readFieldDefinition, readFieldValues } from "@/lib/contact-fields";
 import { importCheckedRows } from "@/lib/contact-import-checked";
 import { MAX_IMPORT_ROWS_PER_REQUEST, normalizeTags } from "@/lib/csv-import";
 import { connectDb } from "@/lib/db";
@@ -14,6 +16,7 @@ import { CONTACT_LIMIT_MESSAGE, getContactRoomFor } from "@/lib/quota";
 import { requireWorkspace } from "@/lib/workspace";
 import { getSuppressionScope } from "@/lib/workspace-rules";
 import Contact from "@/models/Contact";
+import ContactField from "@/models/ContactField";
 import Event from "@/models/Event";
 import Message from "@/models/Message";
 import Newsletter from "@/models/Newsletter";
@@ -70,17 +73,21 @@ export async function addContact({ newsletterId, email, firstName, tags }) {
 
 // The Edit dialog: a first name for {{first_name}}, and the tags the campaign's "To" menu sends to. The tags
 // replace the old ones, since the dialog shows them all.
-export async function updateContact({ id, firstName, tags }) {
+export async function updateContact({ id, firstName, tags, fields }) {
 	const { workspaceId } = await requireWorkspace();
 	if (!isValidObjectId(id)) return { error: "Invalid request" };
 	const name = toFirstName(firstName);
 	const labels = normalizeTags(tags);
 
 	await connectDb();
-	const { matchedCount } = await Contact.updateOne(
-		{ _id: id, workspaceId },
-		name ? { $set: { firstName: name, tags: labels } } : { $set: { tags: labels }, $unset: { firstName: 1 } }
-	);
+	// Custom fields are only the ones this workspace defined; an empty value clears the field.
+	const parsed = readFieldValues(await listContactFields(workspaceId), fields);
+	if (parsed.error) return { error: parsed.error };
+	const fieldSet = Object.fromEntries(Object.entries(parsed.values).filter(([, value]) => value !== null).map(([key, value]) => [`fields.${key}`, value]));
+	const fieldUnset = Object.fromEntries(Object.entries(parsed.values).filter(([, value]) => value === null).map(([key]) => [`fields.${key}`, 1]));
+	const set = { tags: labels, ...(name && { firstName: name }), ...fieldSet };
+	const unset = { ...(!name && { firstName: 1 }), ...fieldUnset };
+	const { matchedCount } = await Contact.updateOne({ _id: id, workspaceId }, { $set: set, ...(Object.keys(unset).length > 0 && { $unset: unset }) });
 	revalidatePath("/contacts");
 	return matchedCount ? { ok: true } : { error: "Contact not found" };
 }
@@ -134,4 +141,33 @@ export async function setContactStatus(id, status) {
 
 	revalidatePath("/contacts");
 	return modifiedCount ? { ok: true } : { error: "Status cannot change" };
+}
+
+// --- Custom fields ---
+
+export async function createContactField({ label, type }) {
+	const { workspaceId } = await requireWorkspace();
+	await connectDb();
+	const existing = await listContactFields(workspaceId);
+	const definition = readFieldDefinition({ label, type }, existing.map(({ key }) => key));
+	if (definition.error) return { error: definition.error };
+	try {
+		await ContactField.create({ workspaceId, ...definition });
+	} catch (error) {
+		if (error?.code === 11000) return { error: `There is already a field called ${definition.key}` };
+		throw error;
+	}
+	revalidatePath("/contacts");
+	return { ok: true, field: definition };
+}
+
+// The field and every value of it on every contact. Emails that still use its tag print the fallback.
+export async function removeContactField(key) {
+	const { workspaceId } = await requireWorkspace();
+	await connectDb();
+	const { deletedCount } = await ContactField.deleteOne({ workspaceId, key: String(key ?? "") });
+	if (!deletedCount) return { error: "Field not found" };
+	await Contact.updateMany({ workspaceId, [`fields.${key}`]: { $exists: true } }, { $unset: { [`fields.${key}`]: 1 } });
+	revalidatePath("/contacts");
+	return { ok: true };
 }

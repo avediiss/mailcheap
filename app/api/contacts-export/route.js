@@ -1,5 +1,6 @@
 import { buildContactFilters, readContactFilters } from "@/lib/contact-filter";
-import { CSV_HEADER_LINE, contactToCsvLine } from "@/lib/contacts-csv";
+import { listContactFields } from "@/lib/contact-fields-server";
+import { contactToCsvLine, getCsvHeaderLine } from "@/lib/contacts-csv";
 import { connectDb } from "@/lib/db";
 import Contact from "@/models/Contact";
 import { getWorkspaceContext } from "@/lib/workspace";
@@ -22,16 +23,17 @@ export async function GET(request) {
 	await connectDb();
 	const newsletters = await Newsletter.find({ workspaceId: context.workspaceId }).select({ name: 1 }).lean();
 	const names = new Map(newsletters.map(({ _id, name }) => [String(_id), name]));
+	const fieldKeys = (await listContactFields(context.workspaceId)).map(({ key }) => key);
 	const cursor = Contact.find(filter).sort({ _id: 1 }).lean().cursor();
 
 	const encoder = new TextEncoder();
 	const stream = new ReadableStream({
 		async start(controller) {
 			// The byte order mark makes Excel read accented names as UTF-8.
-			controller.enqueue(encoder.encode(`﻿${CSV_HEADER_LINE}\r\n`));
+			controller.enqueue(encoder.encode(`﻿${getCsvHeaderLine(fieldKeys)}\r\n`));
 			try {
 				for await (const contact of cursor) {
-					const line = contactToCsvLine(contact, names.get(String(contact.newsletterId)));
+					const line = contactToCsvLine(contact, names.get(String(contact.newsletterId)), fieldKeys);
 					controller.enqueue(encoder.encode(`${line}\r\n`));
 				}
 				controller.close();

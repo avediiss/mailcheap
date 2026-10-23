@@ -12,6 +12,9 @@ const contactSchema = new mongoose.Schema(
 		source: { type: String, trim: true },
 		// For {{first_name}} in emails (lib/merge-tags.js). Optional: signups, imports and the Add dialog can set it.
 		firstName: { type: String, trim: true, maxlength: 60 },
+		// Values for the workspace's custom fields (models/ContactField.js), by key: text, a number, or a date as
+		// "YYYY-MM-DD". Printed in emails with {{key}}.
+		fields: { type: mongoose.Schema.Types.Mixed },
 		// Labels to send to a part of the list (the campaign's "To" menu). Lowercase, at most 10 per contact.
 		tags: [{ type: String, trim: true, lowercase: true, maxlength: 40 }],
 		subscribedAt: { type: Date, default: Date.now },

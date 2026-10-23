@@ -6,6 +6,7 @@ import AvatarContact from "@/components/AvatarContact";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import BadgeStatus from "@/components/BadgeStatus";
 import DialogAddContact from "@/components/DialogAddContact";
+import DialogContactFields from "@/components/DialogContactFields";
 import DialogImportContacts from "@/components/DialogImportContacts";
 import FilterContacts from "@/components/FilterContacts";
 import HeaderPage from "@/components/HeaderPage";
@@ -22,6 +23,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { listContactFields } from "@/lib/contact-fields-server";
 import { buildContactFilters, readContactFilters } from "@/lib/contact-filter";
 import { connectDb } from "@/lib/db";
 import { requireWorkspace } from "@/lib/workspace";
@@ -53,7 +55,8 @@ export default async function ContactsPage({ searchParams }) {
 	);
 
 	// One count per status reads only the status indexes; grouping the contacts would read every one.
-	const [statusCounts, contacts] = await Promise.all([
+	const [fieldDefs, statusCounts, contacts] = await Promise.all([
+		listContactFields(workspaceId),
 		Promise.all(CONTACT_STATUSES.map((key) => Contact.countDocuments({ ...baseFilter, status: key }))),
 		Contact.find(filter)
 			.sort({ subscribedAt: -1, _id: -1 })
@@ -87,6 +90,7 @@ export default async function ContactsPage({ searchParams }) {
 						Export
 					</a>
 				</Button>
+				<DialogContactFields fields={fieldDefs} />
 				<DialogAddContact newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
 					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
 			</HeaderPage>
@@ -195,6 +199,8 @@ export default async function ContactsPage({ searchParams }) {
 												status={contact.status}
 												firstName={contact.firstName}
 												tags={contact.tags ?? []}
+												fieldDefs={fieldDefs}
+												fieldValues={contact.fields ?? {}}
 											/>
 										</TableCell>
 									</TableRow>
