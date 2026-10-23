@@ -11,6 +11,7 @@ import { getAppUrl, isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { getScheduleProblem } from "@/lib/schedule";
 import { publishScheduledSend } from "@/lib/scheduling";
+import { ReviewError, assertReviewed } from "@/lib/content-review";
 import { getSendPlanPreview, getCleanupPreview, queueCampaign, sendTestEmail, sendToMoreContacts } from "@/lib/sending";
 import { getSendProblem } from "@/lib/sending-rules";
 import { ARCHIVE_SLUG_PATTERN } from "@/lib/slug";
@@ -160,6 +161,13 @@ export async function scheduleCampaign(id, { scheduledAt, audienceLimit } = {}) 
 	const newsletter = await Newsletter.findById(campaign.newsletterId).lean();
 	const sendProblem = getSendProblem({ campaign, newsletter });
 	if (sendProblem) return { error: sendProblem };
+	// Flagged now rather than when the time comes, so the sender hears about it while they can still change it.
+	try {
+		await assertReviewed(campaign);
+	} catch (error) {
+		if (error instanceof ReviewError) return { error: error.message };
+		throw error;
+	}
 
 	const limit = readAudienceLimit(audienceLimit);
 	const { matchedCount } = await Campaign.updateOne(

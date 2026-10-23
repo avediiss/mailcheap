@@ -7,6 +7,7 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
 import { addWorkspaceDomain } from "@/lib/domains";
 import { inviteMember } from "@/lib/members";
+import { decideReview } from "@/lib/content-review";
 import { resetTwoFactor } from "@/lib/two-factor";
 import { sendAccountReset, setAccountDisabled, signOutAccount } from "@/lib/platform-accounts";
 import { invitePlatformAdmin, removePlatformAdmin, revokePlatformInvitation } from "@/lib/platform-team";
@@ -166,4 +167,15 @@ export async function sendAccountResetAction(userId) {
 // For someone who lost their phone and their recovery codes: they are signed out everywhere and set it up again.
 export async function resetAccountTwoFactorAction(userId) {
 	return runAccountAction(userId, (actor) => resetTwoFactor({ actor, userId }));
+}
+
+// --- Issues the automatic scan flagged ---
+
+// Approve or turn down the exact text that was flagged. The sender is told either way.
+export async function decideReviewAction(campaignId, decision, note) {
+	const session = await requirePlatformAdmin();
+	if (!isValidObjectId(campaignId)) return { error: "This issue isn't waiting for review anymore" };
+	const result = await decideReview({ actor: session, campaignId, decision, note });
+	revalidatePath("/platform", "layout");
+	return result;
 }

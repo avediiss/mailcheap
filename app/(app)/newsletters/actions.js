@@ -1,5 +1,6 @@
 "use server";
 
+import { getContentProblem } from "@/lib/content-review";
 import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -120,7 +121,19 @@ function validateNewsletter(values) {
 	}
 	const sequenceProblem = getSequenceProblem(values.sequence.rows);
 	if (sequenceProblem) return sequenceProblem;
-	return values.requireConfirmation ? getConfirmationProblem(values.confirmation) : null;
+	const confirmationProblem = values.requireConfirmation ? getConfirmationProblem(values.confirmation) : null;
+	if (confirmationProblem) return confirmationProblem;
+	// Automatic emails go out without anyone looking, so the scan for phishing and scams applies when they are saved.
+	const automatic = [
+		values.welcome.enabled && { label: "Welcome email", ...values.welcome },
+		values.requireConfirmation && { label: "Confirmation email", ...values.confirmation },
+		...(values.sequence.enabled ? values.sequence.rows.map((row, index) => ({ label: `Series email ${index + 1}`, ...row })) : []),
+	].filter(Boolean);
+	for (const email of automatic) {
+		const problem = getContentProblem({ label: email.label, subject: email.subject ?? "", body: email.markdown ?? "" });
+		if (problem) return problem;
+	}
+	return null;
 }
 
 // Sending errors become toasts; a thrown error would replace the page with the error boundary.
