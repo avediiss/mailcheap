@@ -103,7 +103,7 @@ async function runSend(send) {
 	try {
 		const outcome = await send();
 		// What the platform wants the sender to know about how it goes out (spread over days, a slice first).
-		return { ok: true, notes: outcome?.notes ?? [] };
+		return outcome?.notes?.length ? { ok: true, notes: outcome.notes } : { ok: true };
 	} catch (error) {
 		console.error("[campaigns] Send failed:", error);
 		return { error: error.message || "Sending failed" };
