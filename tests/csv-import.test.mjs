@@ -19,6 +19,7 @@ test("maps common export headers", () => {
 		clickRate: "Click Through Rate",
 		firstName: null,
 		tags: null,
+		fields: {},
 	});
 });
 
@@ -78,4 +79,23 @@ test("sanitizes rows coming from the browser", () => {
 		openRate: 1,
 		clickRate: undefined,
 	});
+});
+
+test("columns named like a custom field are mapped to it, once, and their values come with the row", () => {
+	const fieldDefs = [{ key: "plan", label: "Plan", type: "text" }, { key: "renewal_date", label: "Renewal date", type: "date" }];
+	const columns = mapColumns(["Email", "Plan", "Renewal Date", "Name"], fieldDefs);
+	assert.deepEqual(columns.fields, { plan: "Plan", renewal_date: "Renewal Date" });
+	assert.equal(columns.firstName, "Name", "a built-in column is never taken by a field");
+	const row = normalizeImportRow({ Email: "a@x.test", Plan: " Pro ", "Renewal Date": "2026-12-01", Name: "Dana" }, columns);
+	assert.deepEqual(row.fields, { plan: "Pro", renewal_date: "2026-12-01" });
+	assert.equal(normalizeImportRow({ Email: "a@x.test", Plan: "", "Renewal Date": "  " }, columns).fields, undefined, "empty cells add nothing");
+	assert.deepEqual(mapColumns(["Email", "Plan"]).fields, {}, "no definitions, no mapping");
+});
+
+test("field values from the browser are cleaned again on the server", () => {
+	const row = sanitizeImportRow({ email: "a@x.test", status: "active", fields: { plan: " Pro ", seats: 12, Bad_Key: "x", "x y": "z", nested: { a: 1 }, empty: "  ", inf: Infinity } });
+	assert.deepEqual(row.fields, { plan: "Pro", seats: 12 });
+	assert.equal(sanitizeImportRow({ email: "a@x.test", status: "active", fields: "plan=Pro" }).fields, undefined);
+	assert.equal(sanitizeImportRow({ email: "a@x.test", status: "active", fields: ["a"] }).fields, undefined);
+	assert.equal(Object.keys(sanitizeImportRow({ email: "a@x.test", status: "active", fields: Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`f${index}`, "v"])) }).fields).length, 25);
 });

@@ -21,7 +21,7 @@ two-factor login, A/B subject tests, a welcome series, resend to non-openers, li
 - **Better:** everything per client, visible to the client and in the console; a platform blocklist of domains; a
   "trusted" setting per client; spam-risk tips in the review step.
 
-### B. Contacts
+### B. Contacts: built, see docs/workspaces.md
 - **Match:** custom fields usable in emails, a page per contact with its activity, saved segments that update
   themselves, background imports up to 250,000 rows with column mapping and preview.
 - **Better:** AND/OR segment rules with live counts; fallbacks on every merge tag.

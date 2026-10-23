@@ -18,16 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 // Opened from a menu, so the caller owns the open state.
-export default function DialogEditContact({ id, email, firstName, tags, isOpen, onOpenChange }) {
+export default function DialogEditContact({ id, email, firstName, tags, fieldDefs = [], fieldValues = {}, isOpen, onOpenChange }) {
 	const router = useRouter();
 	const [name, setName] = useState(firstName ?? "");
 	const [labels, setLabels] = useState((tags ?? []).join(", "));
+	const [values, setValues] = useState(() => Object.fromEntries(fieldDefs.map(({ key }) => [key, fieldValues[key] === undefined || fieldValues[key] === null ? "" : String(fieldValues[key])])));
 	const [isSaving, startSaving] = useTransition();
 
 	function onSubmit(event) {
 		event.preventDefault();
 		startSaving(async () => {
-			const result = await updateContact({ id, firstName: name, tags: labels });
+			const result = await updateContact({ id, firstName: name, tags: labels, fields: values });
 			if (result?.error) return void toast.error(result.error);
 			toast.success("Saved");
 			onOpenChange(false);
@@ -69,6 +70,22 @@ export default function DialogEditContact({ id, email, firstName, tags, isOpen, 
 							Separate with commas. A campaign can be sent to one tag only.
 						</p>
 					</div>
+					{fieldDefs.map(({ key, label, type }) => (
+						<div key={key} className="flex flex-col gap-1.5">
+							<Label htmlFor={`field-${key}-${id}`}>{label}</Label>
+							<Input
+								id={`field-${key}-${id}`}
+								type={type === "date" ? "date" : "text"}
+								inputMode={type === "number" ? "decimal" : undefined}
+								value={values[key] ?? ""}
+								onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+								placeholder={`Used for {{${key}}} in emails`}
+								maxLength={200}
+								autoComplete="off"
+								disabled={isSaving}
+							/>
+						</div>
+					))}
 					<DialogFooter>
 						<Button type="submit" disabled={isSaving} className="min-w-24">
 							{isSaving ? <Loader2 className="animate-spin" /> : "Save"}

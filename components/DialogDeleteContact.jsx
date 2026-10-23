@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteContact } from "@/app/(app)/contacts/actions";
@@ -20,6 +20,7 @@ import { getSuppressionReasonOnDelete } from "@/lib/contact-delete";
 // Opened from a menu, so the caller owns the open state.
 export default function DialogDeleteContact({ id, email, status, isOpen, onOpenChange }) {
 	const router = useRouter();
+	const pathname = usePathname();
 	const [isDeleting, startDeleting] = useTransition();
 	const staysOnList = Boolean(getSuppressionReasonOnDelete(status));
 
@@ -29,7 +30,9 @@ export default function DialogDeleteContact({ id, email, status, isOpen, onOpenC
 			if (result?.error) return void toast.error(result.error);
 			toast.success("Contact deleted");
 			onOpenChange(false);
-			router.refresh();
+			// Deleted from its own page: there is nothing left to show there.
+			if (pathname !== "/contacts") router.replace("/contacts");
+			else router.refresh();
 		});
 	}
 

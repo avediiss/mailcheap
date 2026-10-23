@@ -8,10 +8,11 @@ import { formatNumber } from "@/lib/format";
 // "Everyone", or one tag, or one signup source. Picking saves right away and the page recounts.
 export default function SelectCampaignAudience({ campaignId, audience, options }) {
 	const [isPending, startTransition] = useTransition();
-	const current = audience?.tag ? `tag:${audience.tag}` : audience?.source ? `source:${audience.source}` : "";
+	const current = audience?.segmentId ? `segment:${audience.segmentId}` : audience?.tag ? `tag:${audience.tag}` : audience?.source ? `source:${audience.source}` : "";
+	const segments = options.segments ?? [];
 	const tags = withCurrent(options.tags, audience?.tag);
 	const sources = withCurrent(options.sources, audience?.source);
-	if (tags.length === 0 && sources.length === 0) return null;
+	if (tags.length === 0 && sources.length === 0 && segments.length === 0 && !audience?.segmentId) return null;
 
 	function change(event) {
 		const [kind, ...rest] = event.target.value.split(":");
@@ -20,6 +21,7 @@ export default function SelectCampaignAudience({ campaignId, audience, options }
 			const result = await setCampaignAudience(campaignId, {
 				tag: kind === "tag" ? value : "",
 				source: kind === "source" ? value : "",
+				segmentId: kind === "segment" ? value : "",
 			});
 			if (result?.error) toast.error(result.error);
 		});
@@ -34,6 +36,15 @@ export default function SelectCampaignAudience({ campaignId, audience, options }
 			className="h-8 max-w-48 shrink-0 rounded-md border border-border bg-transparent px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
 		>
 			<option value="">Everyone</option>
+			{(segments.length > 0 || audience?.segmentId) && (
+				<optgroup label="Saved segments">
+					{withCurrentSegment(segments, audience?.segmentId).map(({ value, label, count }) => (
+						<option key={value} value={`segment:${value}`}>
+							{label} ({formatNumber(count)})
+						</option>
+					))}
+				</optgroup>
+			)}
 			{tags.length > 0 && (
 				<optgroup label="Tag">
 					{tags.map(({ value, count }) => (
@@ -60,4 +71,10 @@ export default function SelectCampaignAudience({ campaignId, audience, options }
 function withCurrent(options, selected) {
 	if (!selected || options.some(({ value }) => value === selected)) return options;
 	return [{ value: selected, count: 0 }, ...options];
+}
+
+// A deleted segment still shows as the choice, so the issue says what is wrong instead of reading "Everyone".
+function withCurrentSegment(segments, selected) {
+	if (!selected || segments.some(({ value }) => value === selected)) return segments;
+	return [{ value: selected, label: "Deleted segment", count: 0 }, ...segments];
 }

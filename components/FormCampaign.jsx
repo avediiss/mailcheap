@@ -26,7 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/lib/format";
 import { markdownToHtml } from "@/lib/markdown";
-import { applyMergeTags } from "@/lib/merge-tags";
+import { applyMergeTags, findMergeTagKeys } from "@/lib/merge-tags";
 import { scanContent } from "@/lib/content-scan";
 import { getPresendChecks } from "@/lib/presend-checks";
 import { UNSUBSCRIBE_PLACEHOLDER, renderEmail, withResponsiveImages } from "@/lib/render-email";
@@ -36,6 +36,7 @@ import { useAutosave } from "@/lib/use-autosave";
 const UPLOADING_MESSAGE = "Wait for images to finish uploading";
 
 export default function FormCampaign({
+	fieldKeys = [],
 	campaign,
 	newsletter,
 	audienceCount,
@@ -81,8 +82,8 @@ export default function FormCampaign({
 	);
 	const previewHtml = useMemo(
 		// The preview shows what a reader with no first name gets: {{first_name|friend}} reads "friend".
-		() => withResponsiveImages(applyMergeTags(rendered.html.replaceAll(UNSUBSCRIBE_PLACEHOLDER, "#"), {}, { html: true })),
-		[rendered.html]
+		() => withResponsiveImages(applyMergeTags(rendered.html.replaceAll(UNSUBSCRIBE_PLACEHOLDER, "#"), { fieldKeys }, { html: true })),
+		[rendered.html, fieldKeys]
 	);
 	const { checks, blocking } = getPresendChecks({
 		campaign: { ...campaign, ...values },
@@ -90,6 +91,11 @@ export default function FormCampaign({
 		rendered,
 		isDomainVerified,
 		isSendingEnabled,
+		unknownTags: useMemo(() => {
+			const known = new Set(["first_name", ...fieldKeys]);
+			const used = new Set([deferredValues.subject, deferredValues.previewText, deferredValues.body].flatMap((text) => findMergeTagKeys(text)));
+			return [...used].filter((key) => !known.has(key));
+		}, [deferredValues, fieldKeys]),
 		scan: useMemo(() => scanContent({ subject: deferredValues.subject, previewText: deferredValues.previewText, body: deferredValues.body }), [deferredValues]),
 	});
 
@@ -336,7 +342,7 @@ export default function FormCampaign({
 					<ListChecks checks={checks} />
 					<PreviewEmail
 						sender={newsletter}
-						subject={applyMergeTags(deferredValues.subject, {})}
+						subject={applyMergeTags(deferredValues.subject, { fieldKeys })}
 						previewText={deferredValues.previewText}
 						html={previewHtml}
 						className="lg:min-h-0 lg:flex-1"

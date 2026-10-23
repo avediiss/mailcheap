@@ -6,7 +6,10 @@ import AvatarContact from "@/components/AvatarContact";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import BadgeStatus from "@/components/BadgeStatus";
 import DialogAddContact from "@/components/DialogAddContact";
+import DialogContactFields from "@/components/DialogContactFields";
 import DialogImportContacts from "@/components/DialogImportContacts";
+import DialogSegments from "@/components/DialogSegments";
+import PanelImportProgress from "@/components/PanelImportProgress";
 import FilterContacts from "@/components/FilterContacts";
 import HeaderPage from "@/components/HeaderPage";
 import MenuContact from "@/components/MenuContact";
@@ -22,8 +25,12 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { listContactFields } from "@/lib/contact-fields-server";
 import { buildContactFilters, readContactFilters } from "@/lib/contact-filter";
 import { connectDb } from "@/lib/db";
+import { buildSegmentFilter } from "@/lib/segments";
+import { getImportStatus } from "@/lib/import-jobs";
+import { getSegment, listSegmentsWithCounts } from "@/lib/segments-server";
 import { requireWorkspace } from "@/lib/workspace";
 import { formatDate, formatNumber } from "@/lib/format";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
@@ -38,7 +45,7 @@ const PAGE_SIZE = 50;
 export default async function ContactsPage({ searchParams }) {
 	const { workspaceId } = await requireWorkspace();
 	const params = await searchParams;
-	const { newsletterId, status, query } = readContactFilters(params);
+	const { newsletterId, status, query, segmentId } = readContactFilters(params);
 	const page = Math.max(1, Number.parseInt(params.page, 10) || 1);
 
 	await connectDb();
@@ -46,14 +53,29 @@ export default async function ContactsPage({ searchParams }) {
 	const newsletterOptions = toNewsletterOptions(newsletters);
 	const newsletterMap = toNewsletterMap(newsletters);
 
-	const { baseFilter, filter } = buildContactFilters({ workspaceId, newsletterId, status, query });
+	// Segments belong to one newsletter: shown when one is picked, or when there is only one.
+	const scopeNewsletter = newsletterId ? newsletters.find(({ _id }) => String(_id) === newsletterId) : newsletters.length === 1 ? newsletters[0] : null;
+	const [importStatus, fieldDefsForSegments, segments, selectedSegment] = await Promise.all([
+		getImportStatus({ workspaceId }),
+		listContactFields(workspaceId),
+		scopeNewsletter ? listSegmentsWithCounts({ workspaceId, newsletterId: scopeNewsletter._id }) : [],
+		segmentId ? getSegment({ workspaceId, segmentId }) : null,
+	]);
+	const { baseFilter, filter } = buildContactFilters({
+		workspaceId,
+		newsletterId: newsletterId ?? (selectedSegment?.newsletterId ?? null),
+		status,
+		query,
+		segmentFilter: selectedSegment && buildSegmentFilter(selectedSegment),
+	});
 	// The export downloads what the page shows: same newsletter, status and search.
 	const exportQuery = new URLSearchParams(
-		Object.entries({ newsletter: newsletterId, status, q: query }).filter(([, value]) => value)
+		Object.entries({ newsletter: newsletterId, status, q: query, segment: selectedSegment?.id }).filter(([, value]) => value)
 	);
 
 	// One count per status reads only the status indexes; grouping the contacts would read every one.
-	const [statusCounts, contacts] = await Promise.all([
+	const [fieldDefs, statusCounts, contacts] = await Promise.all([
+		listContactFields(workspaceId),
 		Promise.all(CONTACT_STATUSES.map((key) => Contact.countDocuments({ ...baseFilter, status: key }))),
 		Contact.find(filter)
 			.sort({ subscribedAt: -1, _id: -1 })
@@ -68,7 +90,7 @@ export default async function ContactsPage({ searchParams }) {
 
 	function href(changes) {
 		const next = new URLSearchParams(
-			Object.entries({ newsletter: newsletterId, status, q: query, page }).filter(([, value]) => value)
+			Object.entries({ newsletter: newsletterId, status, q: query, segment: selectedSegment?.id, page }).filter(([, value]) => value)
 		);
 		for (const [key, value] of Object.entries(changes)) {
 			if (value) next.set(key, value);
@@ -87,14 +109,41 @@ export default async function ContactsPage({ searchParams }) {
 						Export
 					</a>
 				</Button>
+				<DialogContactFields fields={fieldDefs} />
 				<DialogAddContact newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
-					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} />
+					<DialogImportContacts newsletters={newsletterOptions} defaultNewsletterId={newsletterId} fieldDefs={fieldDefsForSegments} />
 			</HeaderPage>
 
 			<div className="flex flex-col gap-4">
+				{importStatus && <PanelImportProgress key={importStatus.id} initial={importStatus} />}
 				<Suspense fallback={<Skeleton className="h-9 w-full rounded-lg" />}>
 					<FilterContacts newsletters={newsletterOptions} />
 				</Suspense>
+
+				{scopeNewsletter && (
+					<div className="flex flex-wrap items-center gap-1.5 animate-enter">
+						<span className="mr-1 text-xs font-medium text-muted-foreground">Segments</span>
+						{segments.map((segment) => {
+							const isActive = segment.id === selectedSegment?.id;
+							return (
+								<Link
+									key={segment.id}
+									href={href({ segment: isActive ? null : segment.id, newsletter: String(scopeNewsletter._id), page: null })}
+									scroll={false}
+									aria-current={isActive ? "page" : undefined}
+									className={cn(
+										"inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs transition-colors duration-150",
+										isActive ? "bg-foreground text-background" : "text-muted-foreground shadow-border hover:bg-muted hover:text-foreground"
+									)}
+								>
+									{segment.name}
+									<span className="tabular-nums opacity-60">{formatNumber(segment.count)}</span>
+								</Link>
+							);
+						})}
+						<DialogSegments newsletterId={String(scopeNewsletter._id)} segments={segments} fieldDefs={fieldDefsForSegments} />
+					</div>
+				)}
 
 				<nav
 					aria-label="Status"
@@ -150,7 +199,9 @@ export default async function ContactsPage({ searchParams }) {
 													gravatarHash={gravatarHash(contact.email)}
 													size={26}
 												/>
-												<span className="truncate">{contact.email}</span>
+												<Link href={`/contacts/${contact._id.toString()}`} className="truncate hover:underline">
+													{contact.email}
+												</Link>
 												{contact.firstName && (
 													<span className="hidden shrink-0 text-muted-foreground sm:inline">{contact.firstName}</span>
 												)}
@@ -195,6 +246,8 @@ export default async function ContactsPage({ searchParams }) {
 												status={contact.status}
 												firstName={contact.firstName}
 												tags={contact.tags ?? []}
+												fieldDefs={fieldDefs}
+												fieldValues={contact.fields ?? {}}
 											/>
 										</TableCell>
 									</TableRow>

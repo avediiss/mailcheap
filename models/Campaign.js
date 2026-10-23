@@ -36,6 +36,8 @@ const campaignSchema = new mongoose.Schema(
 		audience: {
 			tag: { type: String, trim: true, lowercase: true, maxlength: 40 },
 			source: { type: String, trim: true, maxlength: 60 },
+			// A saved segment (models/Segment.js): its rules pick the people, worked out when the send starts.
+			segmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Segment" },
 			nonOpenersOf: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign" },
 		},
 		// Subject-line A/B test (lib/ab-test.js): half get subject, half get subjectB, until a winner is picked.
