@@ -38,7 +38,16 @@ export async function startDb() {
 async function loadModels() {
 	const names = ["Alert", "ApiKey", "AuditLog", "BlockedDomain", "Campaign", "Contact", "ContactField", "Domain", "Event", "ImportChunk", "ImportJob", "Invitation", "Membership", "Message", "Newsletter", "Segment", "Suppression", "User", "Workspace"];
 	const loaded = await Promise.all(names.map((name) => import(`@/models/${name}`)));
-	return Object.fromEntries(names.map((name, index) => [name, loaded[index].default]));
+	return { ...Object.fromEntries(names.map((name, index) => [name, loaded[index].default])), ...(await loadGtmModels()) };
+}
+
+// The GTM agent's models (models/gtm), keyed as GtmProduct, GtmOpportunity... so they can't collide with a
+// newsletter model of the same name. They load whether or not GTM_ENABLED is set: the flag decides what
+// runs, not what the schema is, and every collection has to exist for a test to prove it stays empty.
+async function loadGtmModels() {
+	const { GTM_MODEL_NAMES } = await import("@/lib/gtm/schema");
+	const loaded = await Promise.all(GTM_MODEL_NAMES.map((name) => import(`@/models/gtm/${name}`)));
+	return Object.fromEntries(GTM_MODEL_NAMES.map((name, index) => [`Gtm${name}`, loaded[index].default]));
 }
 
 export function resetRequest() {
@@ -49,6 +58,9 @@ export function resetRequest() {
 	globalThis.__sesBehavior = undefined;
 	globalThis.__sesDomains = [];
 	globalThis.__qstashCalls = [];
+	globalThis.__qstashSchedules = new Map();
+	globalThis.__aiCalls = [];
+	globalThis.__aiAnswers = [];
 }
 
 export async function loginAs(user) {
