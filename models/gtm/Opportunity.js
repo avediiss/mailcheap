@@ -20,6 +20,13 @@ const opportunitySchema = new mongoose.Schema(
 		author: { type: String, trim: true, maxlength: 200 },
 		text: { type: String, maxlength: 20_000 },
 		postedAt: { type: Date },
+		// Which of the product's keywords found this post. More than one is a signal in itself, and it is
+		// what lets a founder see why a post reached them.
+		keywords: [{ type: String, trim: true, maxlength: 80 }],
+		// What the post is a reply to: the story on Hacker News, the submission on Reddit, the parent post
+		// on X. Named for the role rather than the platform, since all three have one.
+		contextTitle: { type: String, trim: true, maxlength: 500 },
+		contextUrl: { type: String, trim: true, maxlength: 2000 },
 		score: { type: Number, min: 0, max: 100 },
 		// What made up the score, by name, so a founder can be shown why this post was ranked first.
 		scoreBreakdown: { type: mongoose.Schema.Types.Mixed },

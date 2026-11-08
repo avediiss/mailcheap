@@ -28,15 +28,33 @@ test("the key is a separate question from the flag, so the UI can say which one 
 });
 
 test("the model comes from the environment, with Claude Opus 5.5 as the default", () => {
-	assert.equal(getGtmAiModel({}), "claude-opus-5-5");
+	assert.equal(getGtmAiModel("default", {}), "claude-opus-5-5");
 	assert.equal(DEFAULT_GTM_AI_MODEL, "claude-opus-5-5");
-	assert.equal(getGtmAiModel({ GTM_AI_MODEL: "claude-haiku-5-5" }), "claude-haiku-5-5");
-	assert.equal(getGtmAiModel({ GTM_AI_MODEL: "  claude-sonnet-5-5  " }), "claude-sonnet-5-5");
-	assert.equal(getGtmAiModel({ GTM_AI_MODEL: "   " }), "claude-opus-5-5", "a blank setting falls back");
+	assert.equal(getGtmAiModel("default", { GTM_AI_MODEL: "claude-haiku-5-5" }), "claude-haiku-5-5");
+	assert.equal(getGtmAiModel("default", { GTM_AI_MODEL: "  claude-sonnet-5-5  " }), "claude-sonnet-5-5");
+	assert.equal(getGtmAiModel("default", { GTM_AI_MODEL: "   " }), "claude-opus-5-5", "a blank setting falls back");
 });
 
 test("the default model has a price, or every cost logged would be null", () => {
 	assert.ok(AI_PRICES_PER_MILLION_TOKENS[DEFAULT_GTM_AI_MODEL], "the default is on the price list");
+});
+
+test("the model follows the purpose, and one setting can still override every purpose", () => {
+	// Scoring runs dozens of times a scan on short comments; drafting goes out under the founder's name.
+	const scoring = getGtmAiModel("score_opportunity", {});
+	assert.equal(scoring, "claude-haiku-5-5");
+	assert.notEqual(scoring, getGtmAiModel("draft_reply", {}));
+	assert.equal(getGtmAiModel("draft_reply", {}), DEFAULT_GTM_AI_MODEL);
+	// A purpose nobody has priced differently falls back rather than failing.
+	assert.equal(getGtmAiModel("something_new", {}), DEFAULT_GTM_AI_MODEL);
+	// One variable pins the whole module to one model while testing.
+	assert.equal(getGtmAiModel("score_opportunity", { GTM_AI_MODEL: "claude-opus-5-5" }), "claude-opus-5-5");
+
+	const cheap = AI_PRICES_PER_MILLION_TOKENS[scoring];
+	const standard = AI_PRICES_PER_MILLION_TOKENS[DEFAULT_GTM_AI_MODEL];
+	assert.ok(cheap, "the scoring model is on the price list");
+	// The whole point of the split: if this stops being true, the split is costing complexity for nothing.
+	assert.ok(cheap.input < standard.input && cheap.output < standard.output);
 });
 
 test("a call's cost is worked out from the tokens actually billed", () => {

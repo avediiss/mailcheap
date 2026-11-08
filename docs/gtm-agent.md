@@ -175,6 +175,134 @@ no `gtm_products` row and, because `workspaceId` is required, no `gtm_ai_usage` 
 printed instead and the run is absent from the cost model. And it **refuses to run with
 `NODE_ENV=production`**: it is a development tool that spends real money, one API call per step, per URL.
 
+## The radar
+
+### What it searches, and why the parameters matter more than the code
+
+Hacker News first, through its Algolia search: no key, no account, no quota to negotiate, so the whole loop
+can be proved for nothing before anyone pays X for the privilege. `lib/gtm/sources/hn.js` owns every detail
+of that API; everything above it sees a platform-neutral candidate.
+
+The search parameters are the most consequential decision in the radar, because every post that comes back
+costs money to score later. Measured over ninety days of comments:
+
+| keyword | quoted phrase | every word, no typos | Algolia's defaults |
+| --- | --- | --- | --- |
+| google analytics alternative | 0 | **5** | 5 |
+| ga4 | 12 | **12** | 57,555 |
+| cookieless analytics | 2 | **4** | 4 |
+| privacy analytics | 0 | **34** | 101 |
+| self hosted analytics | 0 | **8** | 23 |
+
+Typo tolerance is what inflates a short keyword into tens of thousands of matches; a phrase search is what
+collapses a real keyword to nothing, because people write the words in their own order. So the radar asks
+for **every word, anywhere in the comment, spelled correctly**, and matches only the comment's own text — a
+reply under a headline containing the keyword is not someone discussing it. A test pins each of those three
+choices with the numbers above, so none of them is quietly undone.
+
+### What it remembers
+
+`lib/gtm/radar-store.js`. Each watched source carries `lastScanAt`, so the next scan asks only for what is
+newer and a post is fetched once however often the scan runs. A source never read looks back
+`GTM_LIMITS.radarFirstRunHours` (a week) rather than at the whole archive. **A failed scan does not move the
+watermark** — advancing it would silently skip the window that failed, and nobody would know what was lost;
+the reason goes to `lastError` instead, cleared by the next success.
+
+Opportunities upsert on `{productId, externalId}`. A post seen again has its text refreshed, since a comment
+can be edited, but its `status`, `score` and `reason` are written once and never touched again: they belong
+to the founder, and re-offering a post they skipped every three hours would make the queue useless. The
+uniqueness is per product, so two founders can hold the same post.
+
+### The caps
+
+`maxCandidatesPerKeyword` (25) bounds what one keyword contributes; `maxScoredPerScan` (50) bounds what one
+scan may put in front of the AI. On Hacker News neither binds in practice — a live scan with six keywords
+over thirty days returned eight posts — but they are the difference between a quiet bill and a surprising
+one on a busier platform.
+
+### The cost gate
+
+`lib/gtm/radar-filter.js` stands between searching, which is free, and scoring, which is charged per post.
+It drops what a person would reject on sight: a post already in the queue, one the founder wrote, an
+acknowledgement too short to reply to, one older than the scan window, and anything in one of Hacker News's
+monthly megathreads — "Who is hiring", "Who wants to be hired", "What are you working on". Those threads
+mention every tool there is and ask for nothing; on a live scan they were **six of fourteen results**.
+
+Every drop carries its reason and the reasons are counted, so "why is my queue empty" has an answer. What
+survives is ranked by how many of the product's keywords found it, then by recency, and cut to
+`maxScoredPerScan`.
+
+The minimum length is deliberately low (30 characters). The instinct is to demand substance, but the best
+opportunity a radar can find is "anyone know something simpler than GA4?" — thirty-nine characters. A
+higher bar would quietly keep the essays and throw away the questions.
+
+### Scoring
+
+`lib/gtm/radar-score.js` with its prompt in `lib/gtm/prompts/score.js`. Ten posts per call, because the
+product profile is sent once per batch instead of once per post. The model is chosen by purpose:
+`score_opportunity` runs on `claude-haiku-5-5`, around forty times cheaper than the default, because
+"is this person describing our problem" is a short question about a short comment. Drafting, where a
+person's name goes on the answer, keeps the good model. `GTM_AI_MODEL` still overrides every purpose at
+once.
+
+A score belongs to a post that was in the batch or it is discarded — a model inventing an id must never
+land a score on something nobody asked about. Entries missing a number or a reason are dropped and the
+rest still count; a batch with nothing usable is an error, which `askForJson` retries once. A failed batch
+costs that batch, not the scan: its posts are saved unscored and the next scan tries again.
+
+**Measured on a live scan:** eight posts, one call, 4,142 input and 400 output tokens, **$0.00061**. Every
+one scored 12 or below, with reasons like "explaining EU cookie banner law to others in general; an expert
+commentary, not a request for help". That is the correct answer — and the prompt says so in as many words,
+because a prompt that reads "find the good ones" produces a model that finds good ones whether or not they
+exist.
+
+### What Hacker News turned out not to have
+
+Hacker News was chosen first because it is free, which it is. Measured against a real product — privacy
+analytics, ten keywords, comments and stories, ninety days — it returned 101 posts, of which 60 survived
+the filter and **none scored above 40**. The best were an expert explaining cookie law, someone auditing
+apps for tracking SDKs, and a complaint about a competitor's founder.
+
+Three things were tried and none of them was the problem:
+
+| tried | result |
+| --- | --- |
+| better keywords — help-seeking language rather than category nouns | still zero |
+| searching stories and Ask HN, not only comments | 32 posts became 101, still zero |
+| a stricter or looser matching strategy | changes volume, not quality |
+
+Hacker News is a place where people discuss, explain and show their work. People asking "what should I use
+instead of X" do that on Reddit. The radar is right; the platform was wrong for this product. Every piece
+of it — the candidate shape, the filter, the scorer, the store — is platform-neutral, so Reddit is one new
+file in `lib/gtm/sources/` rather than a rewrite.
+
+### Reddit
+
+`lib/gtm/sources/reddit.js`, and built the other way round from Hacker News on purpose. Hacker News is a
+search engine, so the radar asks it questions. Reddit is a set of rooms, so the radar reads what was
+posted in each room and matches the keywords itself — one request per subreddit per scan instead of one
+per keyword per subreddit, no search relevance to argue with, and one visible definition of "matched" that
+is the same on every platform: every word of a keyword must appear somewhere in the post.
+
+**Reddit needs an app.** Every unauthenticated route is gone — `www`, `old`, search and plain listings all
+answer 403 — so it reads through OAuth client credentials or not at all. Create a script app at
+reddit.com/prefs/apps and set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET`. Without them the radar skips
+Reddit sources and says so in the scan's problems rather than failing. The token is fetched once per
+process and reused until it is a minute from expiring.
+
+**Not yet proved against the live API.** Every test runs against a fake. The token exchange, the listing
+shape and the rate limits come from Reddit's documentation, and the first real call will say whether that
+was enough — which, on this project's record, is a coin toss.
+
+### What search cannot do
+
+Of those eight live results, the top three were a "Who wants to be hired" résumé, a competitor's job ad and
+a product launch post. All three legitimately contain the keywords; none is a person with the problem. No
+mechanical rule separates "mentions analytics" from "needs analytics", which is why scoring is not a ranking
+layer on top of search — it is where almost all of the judgement lives.
+
+## Tests
+
 ```bash
 npm test                                # lib/gtm unit tests, no database
 npm run test:db                         # the schema, the onboarding services and the server actions
@@ -197,5 +325,40 @@ transform, so `app/(app)/gtm/page.js` is proved by `npm run build` and by openin
   the profiles with what they cost. The AI client is now split so the command uses the app's own request
   path. Still unproven against the live API: that takes a real key and a real product.
 
-Week 1 is finished — the foundation. The radar searches nothing, nothing is drafted and nothing is posted:
-that is Week 2 onwards.
+Week 1 is finished — the foundation.
+
+### Week 2 — the radar finds things
+
+- **Phase 1 — the Hacker News client.** Done: `lib/gtm/sources/hn.js`, with the matching strategy chosen
+  from measurements rather than from the documentation, and proved against the live API.
+- **Phase 2 — watermark and dedup.** Done: `lib/gtm/radar-store.js`, `lastScanAt` and `lastError` on a
+  source, opportunities that upsert without ever overwriting what the founder decided.
+- **Phase 3 — the cost gate.** Done: `lib/gtm/radar-filter.js` drops what is already stored, the founder's
+  own, too short, too old or in a megathread, counts every reason, and caps what one scan may cost.
+- **Phase 4 — scoring.** Done: `lib/gtm/radar-score.js`, batched, on the cheap model, validated and
+  retried like every other AI call. Proved against live posts for less than a tenth of a cent.
+- **Phase 5 — the queue.** Done: `/gtm/radar` lists unhandled posts best first with the score, the reason
+  and a skip, and an empty state that says which kind of empty it is. Unscored posts sort last rather than
+  hiding, so a failed batch never looks like a quiet day.
+- **Phase 6 — wiring.** Done: the three-hourly scan reads every ready product's sources, filters, scores
+  and fills the queue, and `npm run dev:gtm-radar -- <url>` runs one by hand against a real product.
+
+Week 2 is finished. The loop runs: scan, filter, score, queue. Nothing is drafted and nothing is posted —
+that is Week 3 onwards.
+
+### Running one scan by hand
+
+```bash
+npm run dev:gtm-radar -- https://plausible.io          # the first-scan window, seven days
+npm run dev:gtm-radar -- --days 30 https://plausible.io
+```
+
+Reads the site, extracts a profile as onboarding would, searches on that profile's own keywords, applies
+the same filter the scheduled scan applies, scores what survives and prints each verdict with its reason.
+Writes nothing — no workspace, so no `gtm_opportunities` and no `gtm_ai_usage` either, and the cost is
+printed instead. A real run against Plausible over seven days: 9 found, 5 dropped as megathreads, 4 scored,
+**0 worth replying to**, two AI calls, $0.028.
+- **Reddit.** Written and tested, waiting on credentials: Reddit replaced self-service app registration
+  with an approval process, so `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` need an approved app.
+
+Nothing is drafted and nothing is posted: that is Week 3 onwards.

@@ -3,8 +3,10 @@
 import { isValidObjectId } from "mongoose";
 import { revalidatePath } from "next/cache";
 import { isGtmAiConfigured, isGtmEnabled } from "@/lib/gtm/config";
+import { setOpportunityStatus } from "@/lib/gtm/radar-store";
 import {
 	answerInterview,
+	getProduct,
 	readSiteAndExtractProfile,
 	saveProfile,
 	saveVoiceSamples,
@@ -114,6 +116,27 @@ export async function toggleWatchedSource({ sourceId, active }) {
 	});
 	revalidatePath("/gtm");
 	return result;
+}
+
+// The radar's one action: the founder saying no. Scoped by their own product as well as by the id, so a
+// guessed id reaches nothing, and a skip is never undone by a later scan.
+export async function skipOpportunity({ opportunityId }) {
+	const gate = await requireGtmWorkspace();
+	if (gate.error) return { error: gate.error };
+	if (!isValidObjectId(String(opportunityId ?? ""))) return { error: "That post is gone" };
+
+	const product = await getProduct(gate.workspaceId);
+	if (!product) return { error: "There is no product to skip a post for" };
+
+	const { changed } = await setOpportunityStatus({
+		productId: product._id,
+		opportunityId: String(opportunityId),
+		status: "skipped",
+	});
+	if (!changed) return { error: "That post is gone" };
+
+	revalidatePath("/gtm/radar");
+	return { ok: true };
 }
 
 export async function saveVoice({ texts }) {

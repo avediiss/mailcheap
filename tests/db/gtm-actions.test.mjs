@@ -160,3 +160,72 @@ describe("ids from the browser", () => {
 		assert.equal(after.active, true, "still watched");
 	});
 });
+
+describe("skipping a post the radar found", () => {
+	async function anOpportunity(workspace, product) {
+		return models.GtmOpportunity.create({
+			workspaceId: workspace._id,
+			productId: product._id,
+			platform: "hn",
+			externalId: "50342098",
+			url: "https://news.ycombinator.com/item?id=50342098",
+			text: "GA4 is confusing and I cannot find basic numbers.",
+			postedAt: new Date("2026-11-07T12:00:00.000Z"),
+			score: 82,
+		});
+	}
+
+	async function aProduct(workspace) {
+		return models.GtmProduct.create({ workspaceId: workspace._id, url: "https://acme.test", onboardingStatus: "ready" });
+	}
+
+	test("the founder's skip is remembered", async () => {
+		await signIn(tenant.owner, tenant.workspace);
+		const actions = await import("@/app/(app)/gtm/actions");
+		const product = await aProduct(tenant.workspace);
+		const row = await anOpportunity(tenant.workspace, product);
+
+		const result = await actions.skipOpportunity({ opportunityId: String(row._id) });
+
+		assert.deepEqual(result, { ok: true });
+		assert.equal((await models.GtmOpportunity.findById(row._id).lean()).status, "skipped");
+	});
+
+	test("with the module off nothing is skipped", async () => {
+		delete process.env.GTM_ENABLED;
+		await signIn(tenant.owner, tenant.workspace);
+		const actions = await import("@/app/(app)/gtm/actions");
+		const product = await aProduct(tenant.workspace);
+		const row = await anOpportunity(tenant.workspace, product);
+
+		const result = await actions.skipOpportunity({ opportunityId: String(row._id) });
+
+		assert.match(result.error, /isn't switched on/);
+		assert.equal((await models.GtmOpportunity.findById(row._id).lean()).status, "new");
+	});
+
+	test("an id from the browser cannot reach another workspace's post", async () => {
+		await signIn(tenant.owner, tenant.workspace);
+		const actions = await import("@/app/(app)/gtm/actions");
+		const product = await aProduct(tenant.workspace);
+		const row = await anOpportunity(tenant.workspace, product);
+
+		// A second workspace, signed in, holding Acme's opportunity id.
+		const other = await makeTenant(models, { name: "Other", slug: "other" });
+		await aProduct(other.workspace);
+		await signIn(other.owner, other.workspace);
+
+		const result = await actions.skipOpportunity({ opportunityId: String(row._id) });
+
+		assert.match(result.error, /gone/);
+		assert.equal((await models.GtmOpportunity.findById(row._id).lean()).status, "new");
+	});
+
+	test("a malformed id is refused before it reaches the database", async () => {
+		await signIn(tenant.owner, tenant.workspace);
+		const actions = await import("@/app/(app)/gtm/actions");
+
+		assert.match((await actions.skipOpportunity({ opportunityId: "not-an-id" })).error, /gone/);
+		assert.match((await actions.skipOpportunity({})).error, /gone/);
+	});
+});

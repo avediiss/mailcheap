@@ -16,6 +16,13 @@ const watchedSourceSchema = new mongoose.Schema(
 		// Switched off instead of deleted, so an old source stops being scanned without orphaning the
 		// opportunities it already produced.
 		active: { type: Boolean, default: true },
+		// How far the radar has read. The next scan asks only for what is newer, so a post is fetched
+		// once however often the scan runs. Null means never scanned, and the first scan then looks back
+		// a bounded window instead of the whole archive.
+		lastScanAt: { type: Date, default: null },
+		// Why the last scan of this source failed, kept so a source that has quietly stopped working can
+		// be seen rather than inferred from an empty queue. Cleared by the next success.
+		lastError: { type: String, trim: true, maxlength: 300, default: null },
 	},
 	{ timestamps: true, collection: "gtm_watched_sources" }
 );

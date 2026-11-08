@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Check, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Step 6. What the radar will work from, as the founder left it. Every row goes back to the step that owns
 // it, because this is the screen where someone notices the keywords are wrong.
@@ -41,6 +43,10 @@ export default function CardGtmSummary({ state, onEdit }) {
 						The radar scans every three hours and will start finding posts worth replying to. Nothing is posted
 						without you.
 					</p>
+					{/* The daily screen, once this one-off is done. */}
+					<Button asChild size="sm" className="mt-2.5">
+						<Link href="/gtm/radar">See what the radar found</Link>
+					</Button>
 				</div>
 			</div>
 
