@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Building2, ShieldAlert, Globe, KeyRound, LayoutGrid, Newspaper, Send, ShieldCheck, UserCog, Users } from "lucide-react";
+import { Activity, Building2, ShieldAlert, Globe, KeyRound, LayoutGrid, Newspaper, Radar, Send, ShieldCheck, UserCog, Users } from "lucide-react";
 import { hasRole } from "@/lib/workspace-rules";
 import { cn } from "@/lib/utils";
 
-export default function NavLinks({ onNavigate, role, isPlatformAdmin = false, showWorkspace = true }) {
+export default function NavLinks({ onNavigate, role, isPlatformAdmin = false, showWorkspace = true, showGtm = false }) {
 	const pathname = usePathname();
 
-	const items = showWorkspace ? NAV_ITEMS.filter(({ requires }) => !requires || hasRole(role, requires)) : [];
+	// The GTM agent is behind a feature flag, read on the server (lib/gtm/config.js) and passed down: with
+	// it off its page answers 404, so there must be no link to it.
+	const items = showWorkspace
+		? [...NAV_ITEMS, ...(showGtm ? GTM_ITEMS : [])].filter(({ requires }) => !requires || hasRole(role, requires))
+		: [];
 
 	return (
 		<nav className="flex flex-col gap-0.5">
@@ -56,6 +60,9 @@ const NAV_ITEMS = [
 	// Keys reach everything in the workspace, so only its owners see them.
 	{ href: "/api-keys", label: "API keys", icon: KeyRound, requires: "owner" },
 ];
+
+// Shown only when GTM_ENABLED is on. It posts as the workspace and spends on AI, so only owners see it.
+const GTM_ITEMS = [{ href: "/gtm", label: "GTM agent", icon: Radar, requires: "owner" }];
 
 // The platform owner's own pages, apart from any one workspace.
 const PLATFORM_ITEMS = [
