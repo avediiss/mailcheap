@@ -1,4 +1,4 @@
-// Runs one radar scan by hand, against a real product and the real Hacker News, and prints what it would
+// Runs one radar scan by hand, against a real product, Hacker News and Bluesky, and prints what it would
 // have put in the founder's queue.
 //
 //   npm run dev:gtm-radar -- https://plausible.io
@@ -12,11 +12,13 @@
 // gtm_ai_usage rows — the cost is printed instead and the run is absent from the cost model. Development
 // only: it refuses to run with NODE_ENV=production.
 import { askForJson, createAiClient } from "../lib/gtm/ai-core.js";
+import { GTM_LIMITS } from "../lib/gtm/config.js";
 import { PROFILE_JSON_SCHEMA, readProfile } from "../lib/gtm/profile.js";
 import { PROFILE_SYSTEM, buildProfilePrompt } from "../lib/gtm/prompts/profile.js";
 import { filterCandidates } from "../lib/gtm/radar-filter.js";
 import { scoreCandidates } from "../lib/gtm/radar-score.js";
 import { readSite } from "../lib/gtm/site-reader.js";
+import { searchBluesky } from "../lib/gtm/sources/bluesky.js";
 import { searchHn } from "../lib/gtm/sources/hn.js";
 
 function usage() {
@@ -89,13 +91,27 @@ if (profile.error) {
 console.log(`Keywords (${profile.value.keywords.length}): ${profile.value.keywords.join(", ")}`);
 
 const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-const { candidates, problems } = await searchHn({ keywords: profile.value.keywords, since });
-const { kept, counts } = filterCandidates({ candidates, since });
+// Both platforms the scheduled scan reads without credentials. No cap on what is kept, as in the scan:
+// the cap there is on scoring spend, and a hand-run wants to see everything.
+//
+// A hand-run reads the whole window in one pass, which the scheduled scan reads a few hours at a time, each
+// time up to maxCandidatesPerKeyword per keyword. Read only one scan's worth here and a month-long run
+// understates the platform: measured, the best post of a month was the 29th match of its keyword, past the
+// 25 a single scan reads. So it gets what the scheduled scans would have read over the same days.
+const scansInWindow = Math.ceil((days * 24) / GTM_LIMITS.radarIntervalHours);
+const limitPerKeyword = scansInWindow * GTM_LIMITS.maxCandidatesPerKeyword;
+const searches = [
+	{ name: "Hacker News", ...(await searchHn({ keywords: profile.value.keywords, since, limitPerKeyword })) },
+	{ name: "Bluesky", ...(await searchBluesky({ keywords: profile.value.keywords, since, limitPerKeyword })) },
+];
+const candidates = searches.flatMap((search) => search.candidates);
+const problems = searches.flatMap((search) => search.problems.map((problem) => ({ ...problem, platform: search.name })));
+const { kept, counts } = filterCandidates({ candidates, since, limit: Number.POSITIVE_INFINITY });
 
 console.log("");
-console.log(`Over ${days} days: found ${candidates.length}, kept ${kept.length}`);
+console.log(`Over ${days} days: found ${candidates.length} (${searches.map((search) => `${search.name} ${search.candidates.length}`).join(", ")}), kept ${kept.length}`);
 for (const [reason, dropped] of Object.entries(counts)) console.log(`  dropped ${dropped}: ${reason}`);
-for (const problem of problems) console.log(`  problem on "${problem.keyword}": ${problem.error}`);
+for (const problem of problems) console.log(`  ${problem.platform} problem on "${problem.keyword}": ${problem.error}`);
 
 const { scored, unscored } = await scoreCandidates({ candidates: kept, profile: profile.value, askForJson: ask });
 const byId = new Map(kept.map((candidate) => [candidate.externalId, candidate]));
@@ -103,7 +119,7 @@ const byId = new Map(kept.map((candidate) => [candidate.externalId, candidate]))
 console.log("");
 for (const entry of scored.sort((a, b) => b.score - a.score)) {
 	const candidate = byId.get(entry.externalId);
-	console.log(`${String(entry.score).padStart(3)} | ${candidate.url}`);
+	console.log(`${String(entry.score).padStart(3)} | ${candidate.platform === "bluesky" ? "Bluesky" : "HN"} | ${candidate.url}`);
 	console.log(`    ${(candidate.storyTitle || "").slice(0, 90)}`);
 	console.log(`    ${entry.reason}`);
 }

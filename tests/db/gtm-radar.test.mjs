@@ -312,6 +312,50 @@ describe("the scan that actually scans", () => {
 		assert.equal(row.score, undefined);
 	});
 
+	test("posts beyond the scoring budget are saved, and scored by the next scan", async () => {
+		// The bug this pins: the cap used to decide what was saved, and the watermark moved past whatever it
+		// cut, so those posts were never seen again. Now the cap limits spending, not storage.
+		process.env.GTM_ENABLED = "true";
+		process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+		const { runRadarScan } = await import("@/lib/gtm/radar-jobs");
+		await scannableProduct();
+
+		// More posts than the old cap of 50, or the old code passes this test too and it pins nothing. Each
+		// keyword and kind answers with its own 25, so a hundred distinct posts reach the job.
+		const base = Math.floor(new Date("2026-11-03T00:00:00Z").getTime() / 1000);
+		let request = 0;
+		const original = globalThis.fetch;
+		globalThis.fetch = async () => {
+			const offset = request * 25;
+			request += 1;
+			const hits = Array.from({ length: 25 }, (_, index) => hit(`r${request}-${index}`, { created_at_i: base + (offset + index) * 60 }));
+			return new Response(JSON.stringify(hnHits(hits)), { headers: { "content-type": "application/json" } });
+		};
+		// The scorer is answered for every id; it keeps only the ones actually in its batch.
+		const everyId = Array.from({ length: 4 }, (_, r) => Array.from({ length: 25 }, (_, index) => `r${r + 1}-${index}`)).flat();
+		const answer = () => ({ json: { scores: everyId.map((id) => ({ external_id: id, score: 50, reason: "Judged." })) } });
+
+		let first;
+		let second;
+		try {
+			queueAiAnswers(answer());
+			first = await runRadarScan({ now: new Date("2026-11-03T09:00:00Z"), scoreLimit: 2 });
+			// Nothing new arrives — the same posts come back, already known — but the backlog waits.
+			request = 0;
+			queueAiAnswers(answer());
+			second = await runRadarScan({ now: new Date("2026-11-03T12:00:00Z"), scoreLimit: 2 });
+		} finally {
+			globalThis.fetch = original;
+		}
+
+		assert.equal(first.created, 100, "everything the rules pass is saved, whatever the budget");
+		assert.equal(first.scored, 2);
+		assert.equal(second.created, 0);
+		assert.equal(second.scored, 2, "the next scan works through the backlog");
+		assert.equal(await models.GtmOpportunity.countDocuments({ score: { $ne: null } }), 4);
+		assert.equal(await models.GtmOpportunity.countDocuments({ score: null }), 96);
+	});
+
 	test("a hiring thread never reaches the scorer", async () => {
 		process.env.GTM_ENABLED = "true";
 		process.env.ANTHROPIC_API_KEY = "sk-ant-test";
@@ -325,5 +369,111 @@ describe("the scan that actually scans", () => {
 		assert.equal(result.created, 0);
 		assert.equal(result.scored, 0);
 		assert.equal(await models.GtmOpportunity.countDocuments({}), 0);
+	});
+});
+
+describe("Bluesky in the scan", () => {
+	function blueskyPost(id, overrides = {}) {
+		return {
+			uri: `at://did:plc:test/app.bsky.feed.post/${id}`,
+			author: { handle: "someone.bsky.social" },
+			record: { text: "Anyone know a ga4 replacement that isn't a nightmare?", createdAt: "2026-11-03T08:00:00.000Z" },
+			indexedAt: "2026-11-03T08:00:01.000Z",
+			...overrides,
+		};
+	}
+
+	async function blueskyProduct({ withProfile = false } = {}) {
+		const product = await models.GtmProduct.create({
+			workspaceId: tenant.workspace._id,
+			url: "https://acme.test",
+			onboardingStatus: "ready",
+			keywords: ["ga4", "cookie banner"],
+		});
+		const base = { workspaceId: tenant.workspace._id, productId: product._id, platform: "bluesky" };
+		await models.GtmWatchedSource.create({ ...base, url: "https://bsky.app", identifier: "bsky.app" });
+		if (withProfile) {
+			await models.GtmWatchedSource.create({
+				...base,
+				url: "https://bsky.app/profile/founder.bsky.social",
+				identifier: "profile/founder.bsky.social",
+			});
+		}
+		return product;
+	}
+
+	// Answers by the query each request asks, and records which hosts were asked.
+	async function withBluesky(answer, run) {
+		const original = globalThis.fetch;
+		const hosts = [];
+		globalThis.fetch = async (url) => {
+			const parsed = new URL(url);
+			hosts.push(parsed.host);
+			const { status = 200, posts = [] } = answer(parsed.searchParams.get("q")) ?? {};
+			return new Response(JSON.stringify({ posts }), { status, headers: { "content-type": "application/json" } });
+		};
+		try {
+			return { result: await run(), hosts };
+		} finally {
+			globalThis.fetch = original;
+		}
+	}
+
+	test("a Bluesky source is searched and its posts reach the queue as Bluesky posts", async () => {
+		process.env.GTM_ENABLED = "true";
+		delete process.env.ANTHROPIC_API_KEY;
+		const { runRadarScan } = await import("@/lib/gtm/radar-jobs");
+		await blueskyProduct();
+
+		const { result, hosts } = await withBluesky(
+			(query) => ({ posts: query === "ga4" ? [blueskyPost("a")] : [] }),
+			() => runRadarScan({ now: new Date("2026-11-03T09:00:00Z") })
+		);
+
+		assert.equal(result.created, 1);
+		assert.ok(hosts.every((host) => host === "api.bsky.app"));
+		const [row] = await models.GtmOpportunity.find({}).lean();
+		assert.equal(row.platform, "bluesky");
+		assert.equal(row.url, "https://bsky.app/profile/someone.bsky.social/post/a");
+	});
+
+	test("a profile source is never searched, and the founder's own posts never reach the queue", async () => {
+		process.env.GTM_ENABLED = "true";
+		delete process.env.ANTHROPIC_API_KEY;
+		const { runRadarScan } = await import("@/lib/gtm/radar-jobs");
+		await blueskyProduct({ withProfile: true });
+		const own = blueskyPost("own", { author: { handle: "Founder.bsky.social" } });
+
+		const { result, hosts } = await withBluesky(
+			(query) => ({ posts: query === "ga4" ? [own, blueskyPost("theirs")] : [] }),
+			() => runRadarScan({ now: new Date("2026-11-03T09:00:00Z") })
+		);
+
+		// Two keywords against one searchable source: two requests, not four.
+		assert.equal(hosts.length, 2);
+		assert.equal(result.created, 1);
+		assert.deepEqual(
+			(await models.GtmOpportunity.find({}).lean()).map((row) => row.author),
+			["someone.bsky.social"]
+		);
+	});
+
+	test("one keyword failing keeps what the others found, and leaves the watermark for another try", async () => {
+		process.env.GTM_ENABLED = "true";
+		delete process.env.ANTHROPIC_API_KEY;
+		const { runRadarScan } = await import("@/lib/gtm/radar-jobs");
+		const product = await blueskyProduct();
+		const cookiePost = blueskyPost("c", { record: { text: "this cookie banner is ruining my site", createdAt: "2026-11-03T08:00:00.000Z" } });
+
+		const { result } = await withBluesky(
+			(query) => (query === "ga4" ? { status: 500 } : { posts: [cookiePost] }),
+			() => runRadarScan({ now: new Date("2026-11-03T09:00:00Z") })
+		);
+
+		// Before, the error threw this post away; a keyword that always failed would have starved the platform.
+		assert.equal(result.created, 1);
+		assert.match(result.results[0].problems[0].error, /500/);
+		const source = await models.GtmWatchedSource.findOne({ productId: product._id }).lean();
+		assert.equal(source.lastScanAt, null, "the window is read again next time");
 	});
 });

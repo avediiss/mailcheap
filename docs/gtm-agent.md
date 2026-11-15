@@ -146,7 +146,9 @@ is the first call that proves it — which is what the command is for.
 ### The prompts
 
 In `lib/gtm/prompts/`, one file per prompt, as plain exported strings and builder functions:
-`profile.js` (extraction) and `interview.js` (the questions, and the refinement). The JSON shape they must
+`profile.js` (extraction), `interview.js` (the questions, and the refinement) and `keywords.js` — the rules
+for writing keywords, shared by the profile and the refinement so the interview can never quietly undo
+them. The JSON shape they must
 return is **not** in these files — it lives with its validation in `lib/gtm/profile.js`, so editing the
 wording can't drift from what the code insists on. A test holds the schema and the validator to each other.
 
@@ -215,10 +217,17 @@ uniqueness is per product, so two founders can hold the same post.
 
 ### The caps
 
-`maxCandidatesPerKeyword` (25) bounds what one keyword contributes; `maxScoredPerScan` (50) bounds what one
-scan may put in front of the AI. On Hacker News neither binds in practice — a live scan with six keywords
-over thirty days returned eight posts — but they are the difference between a quiet bill and a surprising
-one on a busier platform.
+`maxScoredPerScan` (50) bounds what one scan may **spend on scoring** — not what it keeps. Every post the
+filter passes is saved; the scan then scores the unscored backlog, newest first, up to the cap, and later
+scans work through the rest. That was not always so: the cap used to decide what was saved, and since the
+watermark had already moved past the posts it cut, they were never seen again. On a month of Bluesky the
+single best post of 260 was outside the first 80 the old cap kept. A test with more posts than the old cap
+pins it, and was checked to fail with the fix removed.
+
+`maxCandidatesPerKeyword` (25) bounds what one keyword reads from a platform in one scan, and is a
+deliberate trade-off rather than an oversight: a keyword matching more than 25 posts in three hours is
+almost certainly noise, and its tail is lost rather than read. It only binds on a first scan's week-long
+window, where a broad keyword can exceed it.
 
 ### The cost gate
 
@@ -294,6 +303,49 @@ process and reused until it is a minute from expiring.
 shape and the rate limits come from Reddit's documentation, and the first real call will say whether that
 was enough — which, on this project's record, is a coin toss.
 
+### Bluesky
+
+`lib/gtm/sources/bluesky.js`, searched as a whole like Hacker News, with no key and no account. It is the
+first platform where the radar found a real opportunity. Over thirty days for the privacy-analytics
+product, 260 posts genuinely matched; scored in full, three were above 60 — the best, scored 88, reads
+*"Recommendations for analytics that isn't the big G?"*. Scoring all 260 cost $0.021. Hacker News gave
+none in ninety days.
+
+Two things the documentation does not say, both found by probing:
+
+- `public.api.bsky.app`, the host Bluesky documents as public, refuses search with a 403. `api.bsky.app`
+  answers it unauthenticated. If that changes, an app password and a session are the fallback, which any
+  account can create — no approval process like Reddit's.
+- Paging is refused partway: a later page sometimes answers 403 where the first answered 200. The source
+  treats that as the end of what can be read, keeps what it has, and does not fail the keyword.
+
+Bluesky's own matching is looser than ours — about a quarter of what it returns is missing one of the
+keyword's words — so every post is held to `lib/gtm/sources/match.js`, the one definition of "matched"
+shared with Reddit. A Bluesky profile link (`bsky.app/profile/…`), like a Hacker News `user/` link, names
+the founder rather than a place: it is never searched, and only stops their own posts being offered back.
+
+**The keywords decide whether it finds anything.** The 88 above contained none of the fourteen keywords
+the original profile prompt generated — it says "the big G", not "Google Analytics" — and only a
+help-seeking phrase found it. On Hacker News the keyword style made no difference, because nobody there
+asks for recommendations; on a platform where people do ask, it is the main lever.
+
+So the prompt now writes keywords the way a person asks strangers for help (`lib/gtm/prompts/keywords.js`):
+two or three words, pairing the problem with a word like *recommendations*, *alternative*, *switching*,
+*expensive* or *frustrated*, and avoiding the words sellers use more than buyers. Measured with both keyword
+sets searched over the same month and every post scored once in a single pool, so scoring variance cannot
+pose as a keyword effect:
+
+| keywords for the analytics product | posts kept | 60 or above |
+| --- | --- | --- |
+| old — category nouns | 91 | 0 |
+| new — help-seeking | 82 | 1, scored 95 — the "big G" post, found only by the new set |
+
+One post is a direction, not a rate. The rules were then run, unchanged, on a product they were never shown
+— Buttondown, a newsletter platform — and its generated keywords (`substack fees`, `mailchimp expensive`,
+`switching newsletter provider`) found 167 posts in a month and **seven worth replying to**: a writer whose
+platform shuts down in a month asking where to move, two asking outright for a non-Substack recommendation,
+three more asking about Substack alternatives. Scoring it cost $0.043.
+
 ### What search cannot do
 
 Of those eight live results, the top three were a "Who wants to be hired" résumé, a competitor's job ad and
@@ -356,8 +408,12 @@ npm run dev:gtm-radar -- --days 30 https://plausible.io
 Reads the site, extracts a profile as onboarding would, searches on that profile's own keywords, applies
 the same filter the scheduled scan applies, scores what survives and prints each verdict with its reason.
 Writes nothing — no workspace, so no `gtm_opportunities` and no `gtm_ai_usage` either, and the cost is
-printed instead. A real run against Plausible over seven days: 9 found, 5 dropped as megathreads, 4 scored,
-**0 worth replying to**, two AI calls, $0.028.
+printed instead.
+
+It reads as much per keyword as the scheduled scans would have over the same days — 25 per keyword per
+three-hour scan. An earlier version read one scan's worth for the whole window and understated every
+platform: the best post of a month was the 29th match of its keyword, past the 25 a single scan reads.
+A real run over thirty days for Buttondown: 167 found, **7 worth replying to**, eighteen AI calls, $0.043.
 - **Reddit.** Written and tested, waiting on credentials: Reddit replaced self-service app registration
   with an approval process, so `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` need an approved app.
 

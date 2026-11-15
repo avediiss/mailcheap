@@ -181,6 +181,21 @@ describe("the queue", () => {
 		);
 	});
 
+	test("the unscored backlog comes newest first, and a spent budget returns nothing", async () => {
+		const { listUnscored } = await import("@/lib/gtm/radar-store");
+		await opportunity("old", { postedAt: new Date("2026-11-01T00:00:00Z") });
+		await opportunity("new", { postedAt: new Date("2026-11-07T00:00:00Z") });
+		await opportunity("judged", { score: 40 });
+
+		const backlog = await listUnscored({ productId: product._id, limit: 10 });
+		assert.deepEqual(
+			backlog.map((row) => row.externalId),
+			["new", "old"]
+		);
+		// Mongo reads limit(0) as no limit at all; a budget of zero must mean nothing, not everything.
+		assert.deepEqual(await listUnscored({ productId: product._id, limit: 0 }), []);
+	});
+
 	test("a post the founder has handled is out of the queue", async () => {
 		const { listOpportunities, setOpportunityStatus } = await import("@/lib/gtm/radar-store");
 		const row = await opportunity("skip-me", { score: 90 });

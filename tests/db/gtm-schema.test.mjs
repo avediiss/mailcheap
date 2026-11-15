@@ -141,9 +141,9 @@ describe("the statuses and platforms the module recognises", () => {
 		await assert.rejects(saved.save(), /onboardingStatus/);
 	});
 
-	test("a pasted link that is none of the three known platforms is kept as other, not lost", async () => {
+	test("a pasted link that is none of the known platforms is kept as other, not lost", async () => {
 		const { GTM_PLATFORMS } = await import("@/models/gtm/WatchedSource");
-		assert.deepEqual(GTM_PLATFORMS, ["x", "reddit", "hn", "other"]);
+		assert.deepEqual(GTM_PLATFORMS, ["x", "reddit", "hn", "bluesky", "other"]);
 
 		const saved = await models.GtmProduct.create(product());
 		const base = { workspaceId: tenant.workspace._id, productId: saved._id };

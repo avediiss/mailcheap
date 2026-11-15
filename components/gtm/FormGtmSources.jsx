@@ -9,11 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { readWatchedSource } from "@/lib/gtm/platforms";
+import { PLATFORMS_READ_TODAY, PLATFORM_LABELS, readWatchedSource } from "@/lib/gtm/platforms";
 
 // Step 4. Paste links to accounts and communities. The platform is detected as they type, so they can see
 // what each line will become before saving it — and a line we can't read is shown rather than dropped.
-const PLATFORM_LABELS = { x: "X", reddit: "Reddit", hn: "Hacker News", other: "Other" };
 
 export default function FormGtmSources({ sources, onDone }) {
 	const router = useRouter();
@@ -83,7 +82,7 @@ export default function FormGtmSources({ sources, onDone }) {
 						onChange={(event) => setPasted(event.target.value)}
 						disabled={isSaving}
 					/>
-					<p className="text-xs text-muted-foreground">One per line. X, Reddit and Hacker News are read today.</p>
+					<p className="text-xs text-muted-foreground">One per line. {PLATFORMS_READ_TODAY}</p>
 				</div>
 
 				{previews.length > 0 && (

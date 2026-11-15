@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, X } from "lucide-react";
+import { PLATFORM_LABELS } from "@/lib/gtm/platforms";
 import { toast } from "sonner";
 import { skipOpportunity } from "@/app/(app)/gtm/actions";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +12,6 @@ import { Button } from "@/components/ui/button";
 // The queue: posts the radar thinks are worth a reply, best first. The founder's whole daily use of this
 // module is this screen, so the reason sits beside the score — a number alone asks them to trust it, and
 // the reason is what lets them disagree in one glance.
-
-const PLATFORM_LABELS = { x: "X", reddit: "Reddit", hn: "Hacker News", other: "Elsewhere" };
 
 // Green is a claim, and an unscored post makes no claim at all.
 function toneFor(score) {

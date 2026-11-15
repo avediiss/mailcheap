@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 // Where the radar looks. "other" is stored rather than rejected: a founder pasting a Discord or Slack link
 // should not lose it, even though nothing reads that platform yet.
-export const GTM_PLATFORMS = ["x", "reddit", "hn", "other"];
+export const GTM_PLATFORMS = ["x", "reddit", "hn", "bluesky", "other"];
 
 // An account or community the founder wants watched: the URL they pasted, the platform detected from it
 // (lib/gtm/platforms.js), and the identifier the radar will actually query — a handle, a subreddit name.

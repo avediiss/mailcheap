@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { Check, Pencil } from "lucide-react";
+import { PLATFORM_LABELS } from "@/lib/gtm/platforms";
 import { Button } from "@/components/ui/button";
 
 // Step 6. What the radar will work from, as the founder left it. Every row goes back to the step that owns
 // it, because this is the screen where someone notices the keywords are wrong.
-const PLATFORM_LABELS = { x: "X", reddit: "Reddit", hn: "Hacker News", other: "Other" };
 
 function Row({ title, step, onEdit, children }) {
 	return (

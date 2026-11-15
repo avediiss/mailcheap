@@ -146,3 +146,17 @@ test("a product with nothing filled in yet round-trips to empty, not undefined",
 	assert.deepEqual(back.pains, []);
 	assert.deepEqual(back.keywords, []);
 });
+
+test("both prompts that write keywords carry the same keyword rules", async () => {
+	const { KEYWORD_RULES } = await import("../lib/gtm/prompts/keywords.js");
+	const { PROFILE_SYSTEM } = await import("../lib/gtm/prompts/profile.js");
+	const { REFINE_SYSTEM } = await import("../lib/gtm/prompts/interview.js");
+
+	// If the refinement prompt lost them, the interview would quietly bring back category nouns — which
+	// found 91 posts in a month and not one person who needed the product.
+	assert.ok(PROFILE_SYSTEM.includes(KEYWORD_RULES));
+	assert.ok(REFINE_SYSTEM.includes(KEYWORD_RULES));
+	// The model can only write keywords that match if it knows how matching works.
+	assert.match(KEYWORD_RULES, /every word of that keyword/);
+	assert.match(KEYWORD_RULES, /never more/);
+});

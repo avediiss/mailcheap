@@ -108,3 +108,16 @@ test("a list with nothing in it gives nothing, not a crash", () => {
 	assert.deepEqual(readWatchedSources([]), { sources: [], problems: [] });
 	assert.deepEqual(readWatchedSources(undefined), { sources: [], problems: [] });
 });
+
+test("Bluesky is one place to search, and a profile link names a person", () => {
+	assert.deepEqual(read("https://bsky.app"), { platform: "bluesky", identifier: "bsky.app", url: "https://bsky.app/" });
+	assert.equal(read("https://bsky.app/search?q=ga4").identifier, "bsky.app");
+	// A person, not a place: the founder's own account, so their posts are never offered back to them.
+	assert.equal(read("https://bsky.app/profile/Founder.bsky.social").identifier, "profile/founder.bsky.social");
+	assert.equal(read("https://bsky.app/profile/founder.bsky.social/post/3abc").identifier, "profile/founder.bsky.social");
+});
+
+test("every platform has a name to show, so no screen ever prints a raw enum value", async () => {
+	const { PLATFORM_LABELS } = await import("../lib/gtm/platforms.js");
+	for (const platform of GTM_PLATFORMS) assert.ok(PLATFORM_LABELS[platform], `no label for ${platform}`);
+});
