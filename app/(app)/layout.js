@@ -7,6 +7,7 @@ import NavLinks from "@/components/NavLinks";
 import NavMobile from "@/components/NavMobile";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 import { APP_NAME } from "@/lib/config";
+import { isGtmEnabled } from "@/lib/gtm/config";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 export default async function AppLayout({ children }) {
@@ -29,6 +30,8 @@ export default async function AppLayout({ children }) {
 		</div>
 	);
 	const showWorkspace = Boolean(workspace);
+	// The flag is read here, on the server, so a client component never decides whether the module exists.
+	const showGtm = isGtmEnabled();
 
 	return (
 		<div className="flex min-h-dvh flex-col md:flex-row">
@@ -38,7 +41,7 @@ export default async function AppLayout({ children }) {
 					<span className="text-sm font-semibold tracking-tight">{APP_NAME}</span>
 				</Link>
 				<div className="mb-4">{switcher}</div>
-				<NavLinks role={role} isPlatformAdmin={session.isPlatformAdmin} showWorkspace={showWorkspace} />
+				<NavLinks role={role} isPlatformAdmin={session.isPlatformAdmin} showWorkspace={showWorkspace} showGtm={showGtm} />
 				<div className="mt-auto">
 					<NavFooter user={user} />
 				</div>
@@ -49,6 +52,7 @@ export default async function AppLayout({ children }) {
 				role={role}
 				isPlatformAdmin={session.isPlatformAdmin}
 				showWorkspace={showWorkspace}
+				showGtm={showGtm}
 			/>
 			<main className="min-w-0 flex-1">
 				<div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-10 md:py-10">

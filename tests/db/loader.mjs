@@ -13,6 +13,7 @@ const STUBS = {
 	"next/server": "stubs/next-server.mjs",
 	"@/lib/ses": "stubs/ses.mjs",
 	"@upstash/qstash": "stubs/qstash.mjs",
+	"@anthropic-ai/sdk": "stubs/anthropic.mjs",
 };
 const EXTENSIONS = ["", ".js", ".jsx", "/index.js"];
 
